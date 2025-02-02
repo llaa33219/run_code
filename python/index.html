@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Python Code Viewer</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      background-color: #f5f5f5;
+    }
+    #container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    textarea {
+      width: 80%;
+      height: 60%;
+      font-family: monospace;
+      font-size: 1em;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    pre {
+      width: 80%;
+      height: 80%;
+      overflow: auto;
+      background-color: #e0e0e0;
+      padding: 20px;
+      box-sizing: border-box;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script>
+    // Function to display decoded Python code in full screen
+    function displayCode(decodedCode) {
+      var container = document.getElementById("container");
+      container.innerHTML = "";
+      var pre = document.createElement("pre");
+      // Using textContent ensures that the code is displayed as plain text.
+      pre.textContent = decodedCode;
+      container.appendChild(pre);
+    }
+
+    // Function to display the code input area and execution button
+    function displayInput() {
+      var container = document.getElementById("container");
+      container.innerHTML = 
+        '<textarea id="codeInput" placeholder="여기에 Python 코드를 입력하세요"></textarea><br>' +
+        '<button id="executeBtn">실행</button>';
+      
+      document.getElementById("executeBtn").addEventListener("click", function() {
+        var code = document.getElementById("codeInput").value;
+        try {
+          var encoded = btoa(code);
+        } catch(e) {
+          alert("인코딩 중 오류가 발생했습니다: " + e);
+          return;
+        }
+        // 기존 URL의 프로토콜 및 호스트, pathname 유지한 채 쿼리 스트링에 base64 코드를 추가합니다.
+        window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
+      });
+    }
+
+    // Main logic: Check if the URL contains a base64-encoded Python code starting with "?="
+    (function() {
+      var query = window.location.search;
+      if(query.startsWith("?=") && query.length > 2) {
+        var encoded = query.substring(2);
+        try {
+          var decoded = atob(encoded);
+          displayCode(decoded);
+        } catch(e) {
+          alert("URL에 있는 base64 코드가 올바르지 않습니다. 다시 코드를 입력해주세요.");
+          displayInput();
+        }
+      } else {
+        displayInput();
+      }
+    })();
+  </script>
+</body>
+</html>
