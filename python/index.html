@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Python Code Viewer</title>
+  <title>Python Code Executor</title>
   <style>
     html, body {
       height: 100%;
@@ -44,27 +44,65 @@
       cursor: pointer;
     }
   </style>
+  <!-- 원본 pyodide 스크립트 링크 -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.23.3/full/pyodide.js"></script>
 </head>
 <body>
   <div id="container"></div>
   <script>
-    // Function to display decoded Python code in full screen
-    function displayCode(decodedCode) {
-      var container = document.getElementById("container");
-      container.innerHTML = "";
-      var pre = document.createElement("pre");
-      // Using textContent ensures that the code is displayed as plain text.
-      pre.textContent = decodedCode;
-      container.appendChild(pre);
+    async function main() {
+      let pyodide = await loadPyodide();
+      var query = window.location.search;
+      if(query.startsWith("?=") && query.length > 2) {
+        var encoded = query.substring(2);
+        var code;
+        try {
+          code = atob(encoded);
+        } catch(e) {
+          alert("URL에 있는 base64 코드가 올바르지 않습니다. 다시 코드를 입력해주세요.");
+          displayInput();
+          return;
+        }
+        displayOutput();
+        let outputElement = document.getElementById("output");
+        outputElement.textContent = ""; // 출력 영역 초기화
+
+        // JS 함수로 출력 내용 추가
+        function writeOutput(s) {
+          outputElement.textContent += s;
+        }
+        // pyodide의 글로벌 네임스페이스에 write_output 함수를 등록
+        pyodide.globals.set("write_output", writeOutput);
+        // Python 쪽의 sys.stdout, sys.stderr를 JSWriter 클래스로 재정의하여 JS의 writeOutput 함수를 호출하게 함
+        await pyodide.runPythonAsync(`
+import sys
+class JSWriter:
+    def write(self, s):
+        write_output(s)
+    def flush(self):
+        pass
+sys.stdout = sys.stderr = JSWriter()
+        `);
+        try {
+          // 입력된 Python 코드를 실행
+          let result = await pyodide.runPythonAsync(code);
+          if(result !== undefined && result !== null) {
+            writeOutput("\\n" + result.toString());
+          }
+        } catch(e) {
+          writeOutput("\\nError: " + e);
+        }
+      } else {
+        displayInput();
+      }
     }
 
-    // Function to display the code input area and execution button
+    // 코드 입력창과 실행 버튼을 표시하는 함수
     function displayInput() {
       var container = document.getElementById("container");
       container.innerHTML = 
         '<textarea id="codeInput" placeholder="여기에 Python 코드를 입력하세요"></textarea><br>' +
         '<button id="executeBtn">실행</button>';
-      
       document.getElementById("executeBtn").addEventListener("click", function() {
         var code = document.getElementById("codeInput").value;
         try {
@@ -73,27 +111,18 @@
           alert("인코딩 중 오류가 발생했습니다: " + e);
           return;
         }
-        // 기존 URL의 프로토콜 및 호스트, pathname 유지한 채 쿼리 스트링에 base64 코드를 추가합니다.
+        // 현재 URL의 프로토콜, 호스트, pathname 유지하며 쿼리 스트링에 base64 인코딩된 코드를 추가
         window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
       });
     }
 
-    // Main logic: Check if the URL contains a base64-encoded Python code starting with "?="
-    (function() {
-      var query = window.location.search;
-      if(query.startsWith("?=") && query.length > 2) {
-        var encoded = query.substring(2);
-        try {
-          var decoded = atob(encoded);
-          displayCode(decoded);
-        } catch(e) {
-          alert("URL에 있는 base64 코드가 올바르지 않습니다. 다시 코드를 입력해주세요.");
-          displayInput();
-        }
-      } else {
-        displayInput();
-      }
-    })();
+    // 실행 결과를 보여줄 전체 화면 출력 영역을 표시하는 함수
+    function displayOutput() {
+      var container = document.getElementById("container");
+      container.innerHTML = '<pre id="output"></pre>';
+    }
+
+    main();
   </script>
 </body>
 </html>
