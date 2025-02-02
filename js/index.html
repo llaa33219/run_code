@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Base64 자바스크립트 코드 뷰어</title>
+  <title>Base64 자바스크립트 코드 실행기</title>
   <style>
     html, body {
       margin: 0;
@@ -13,17 +13,6 @@
       box-sizing: border-box;
       width: 100%;
       height: 100%;
-    }
-    /* 전체 화면에 코드 출력 */
-    #codeDisplay {
-      width: 100%;
-      height: 100%;
-      padding: 20px;
-      background-color: #f0f0f0;
-      font-family: monospace;
-      white-space: pre;
-      overflow: auto;
-      margin: 0;
     }
     /* 코드 입력창 및 실행 버튼 */
     #codeInput {
@@ -80,12 +69,13 @@
         try {
           decodedCode = base64DecodeUnicode(encodedCode);
         } catch (e) {
-          decodedCode = 'Base64 디코딩 중 오류 발생: ' + e;
+          alert('Base64 디코딩 중 오류 발생: ' + e);
+          return;
         }
-        var pre = document.createElement('pre');
-        pre.id = 'codeDisplay';
-        pre.textContent = decodedCode;
-        container.appendChild(pre);
+        // 새 스크립트 요소를 생성하여 decodedCode를 실행
+        var script = document.createElement('script');
+        script.textContent = decodedCode;
+        document.body.appendChild(script);
       } else {
         // URL에 코드가 없는 경우, 코드 입력창과 실행 버튼 제공
         container.innerHTML = '';
