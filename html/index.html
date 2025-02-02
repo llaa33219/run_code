@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Base64 HTML 실행기</title>
+  <style>
+    /* 전체 화면 스타일 */
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    /* 코드 입력창 컨테이너 스타일 */
+    #editorContainer {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    /* 텍스트에어리어 스타일 */
+    #codeInput {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    /* 실행 버튼 스타일 */
+    #runButton {
+      margin-top: 10px;
+      padding: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<script>
+  // Unicode-safe Base64 인코딩/디코딩 함수
+  function b64EncodeUnicode(str) {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+      function(match, p1) {
+        return String.fromCharCode('0x' + p1);
+      }));
+  }
+
+  function b64DecodeUnicode(str) {
+    return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {
+      return '%' + c.charCodeAt(0).toString(16).padStart(2, '0');
+    }).join(''));
+  }
+
+  (function(){
+    var query = window.location.search;
+    // URL 쿼리스트링이 "?="로 시작하고 내용이 있다면
+    if (query && query.indexOf('?=') === 0 && query.length > 2) {
+      var encoded = query.substring(2); // "?=" 이후의 문자열 추출
+      try {
+        // Base64 디코딩 (HTML 코드라고 가정)
+        var decoded = b64DecodeUnicode(encoded);
+        // 현재 문서를 디코딩된 HTML 코드로 덮어쓰기
+        document.open();
+        document.write(decoded);
+        document.close();
+      } catch(e) {
+        document.body.innerHTML = "<h2>디코딩 오류</h2><p>" + e.toString() + "</p>";
+      }
+    } else {
+      // 쿼리스트링이 없으면 코드 입력창과 실행 버튼 제공
+      var container = document.createElement('div');
+      container.id = 'editorContainer';
+      
+      var textarea = document.createElement('textarea');
+      textarea.id = 'codeInput';
+      textarea.placeholder = "여기에 HTML 코드를 입력하세요...";
+      
+      var button = document.createElement('button');
+      button.id = 'runButton';
+      button.innerText = "실행";
+      
+      // 버튼 클릭 시 입력된 코드를 Base64 인코딩하여 URL에 적용 후 리다이렉트
+      button.addEventListener('click', function(){
+        var code = textarea.value;
+        try {
+          var encodedCode = b64EncodeUnicode(code);
+          // 현재 도메인과 경로에 ?=encodedCode 추가하여 페이지 이동
+          window.location.href = window.location.origin + window.location.pathname + '?=' + encodedCode;
+        } catch(e) {
+          alert("인코딩 중 오류가 발생했습니다: " + e.toString());
+        }
+      });
+      
+      container.appendChild(textarea);
+      container.appendChild(button);
+      document.body.appendChild(container);
+    }
+  })();
+</script>
+</body>
+</html>
