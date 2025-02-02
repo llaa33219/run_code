@@ -50,6 +50,19 @@
 <body>
   <div id="container"></div>
   <script>
+    // Helper functions to encode/decode Unicode to/from Base64
+    function b64EncodeUnicode(str) {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+        return String.fromCharCode(parseInt(p1, 16));
+      }));
+    }
+
+    function b64DecodeUnicode(str) {
+      return decodeURIComponent(atob(str).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+    }
+
     async function main() {
       let pyodide = await loadPyodide();
       var query = window.location.search;
@@ -57,7 +70,7 @@
         var encoded = query.substring(2);
         var code;
         try {
-          code = atob(encoded);
+          code = b64DecodeUnicode(encoded);
         } catch(e) {
           alert("URL에 있는 base64 코드가 올바르지 않습니다. 다시 코드를 입력해주세요.");
           displayInput();
@@ -106,7 +119,7 @@ sys.stdout = sys.stderr = JSWriter()
       document.getElementById("executeBtn").addEventListener("click", function() {
         var code = document.getElementById("codeInput").value;
         try {
-          var encoded = btoa(code);
+          var encoded = b64EncodeUnicode(code);
         } catch(e) {
           alert("인코딩 중 오류가 발생했습니다: " + e);
           return;
