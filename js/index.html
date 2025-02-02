@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Base64 자바스크립트 코드 뷰어</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #container {
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+    }
+    /* 전체 화면에 코드 출력 */
+    #codeDisplay {
+      width: 100%;
+      height: 100%;
+      padding: 20px;
+      background-color: #f0f0f0;
+      font-family: monospace;
+      white-space: pre;
+      overflow: auto;
+      margin: 0;
+    }
+    /* 코드 입력창 및 실행 버튼 */
+    #codeInput {
+      flex: 1;
+      width: 100%;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 14px;
+      border: none;
+      outline: none;
+      resize: none;
+      box-sizing: border-box;
+    }
+    #runButton {
+      width: 100%;
+      padding: 10px;
+      background-color: #007BFF;
+      color: #fff;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    /* 입력 화면 컨테이너 */
+    .input-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script>
+    (function() {
+      var container = document.getElementById('container');
+      var search = window.location.search;
+      // URL이 "?=" 로 시작하면 base64로 인코딩된 자바스크립트 코드가 전달된 것으로 간주
+      if (search.startsWith('?=')) {
+        var encodedCode = search.substring(2);
+        var decodedCode;
+        try {
+          decodedCode = atob(encodedCode);
+        } catch (e) {
+          decodedCode = 'Base64 디코딩 중 오류 발생: ' + e;
+        }
+        var pre = document.createElement('pre');
+        pre.id = 'codeDisplay';
+        pre.textContent = decodedCode;
+        container.appendChild(pre);
+      } else {
+        // URL에 코드가 없는 경우, 코드 입력창과 실행 버튼 제공
+        container.innerHTML = '';
+        var inputContainer = document.createElement('div');
+        inputContainer.className = 'input-container';
+        
+        var textarea = document.createElement('textarea');
+        textarea.id = 'codeInput';
+        textarea.placeholder = '여기에 자바스크립트 코드를 입력하세요...';
+        inputContainer.appendChild(textarea);
+        
+        var button = document.createElement('button');
+        button.id = 'runButton';
+        button.textContent = '실행';
+        inputContainer.appendChild(button);
+        
+        container.appendChild(inputContainer);
+        
+        button.addEventListener('click', function() {
+          var code = textarea.value;
+          var encoded;
+          try {
+            encoded = btoa(code);
+          } catch (e) {
+            alert('코드 인코딩 중 오류가 발생했습니다: ' + e);
+            return;
+          }
+          // 현재 URL의 origin과 pathname을 유지하고 쿼리스트링에 base64 인코딩된 코드를 추가하여 이동
+          window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
