@@ -2,63 +2,52 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C++ Interactive Terminal Executor</title>
+  <title>Interactive C++ CMD Terminal</title>
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
+    body {
+      background-color: black;
+      color: lime;
       font-family: monospace;
-      background-color: #000;
-      color: #0f0;
+      margin: 0;
+      padding: 0;
     }
-    /* 인터랙티브 터미널 전체 영역 */
+    /* 인터랙티브 터미널 (CMD와 유사한 UI) */
     #terminalContainer {
       display: flex;
       flex-direction: column;
-      height: 100%;
-    }
-    /* 터미널 출력 영역 */
-    #terminal {
-      flex: 1;
+      height: 100vh;
       padding: 10px;
+      box-sizing: border-box;
+    }
+    #terminalOutput {
+      flex: 1;
       overflow-y: auto;
       white-space: pre-wrap;
-      background-color: #000;
-      color: #0f0;
     }
-    /* 입력 영역 (터미널 하단) */
-    #inputArea {
-      border-top: 1px solid #0f0;
-      padding: 10px;
+    #terminalInput {
       display: flex;
+      align-items: center;
+      border-top: 1px solid lime;
+      padding-top: 5px;
     }
-    #inputField {
+    #prompt {
+      margin-right: 5px;
+    }
+    #cmdInput {
       flex: 1;
-      background: #000;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 5px;
+      background-color: black;
+      color: lime;
+      border: none;
+      outline: none;
       font-family: monospace;
       font-size: 16px;
     }
-    #submitButton, #resetButton {
-      background: #0f0;
-      color: #000;
-      border: none;
-      padding: 5px 10px;
-      margin-left: 10px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    /* 초기 코드/입력값 입력 폼 */
+    /* 초기 코드 입력 폼 (코드 및 초기 표준입력) */
     #inputForm {
       display: flex;
       flex-direction: column;
-      height: 100%;
-      padding: 20px;
+      padding: 10px;
       box-sizing: border-box;
-      background-color: #000;
-      color: #0f0;
     }
     #codeInput, #stdinInput {
       width: 100%;
@@ -67,24 +56,18 @@
       padding: 10px;
       margin-bottom: 10px;
       resize: none;
-      background: #000;
-      color: #0f0;
-      border: 1px solid #0f0;
       box-sizing: border-box;
     }
     #codeInput {
-      height: 50%;
+      height: 50vh;
     }
     #stdinInput {
-      height: 20%;
+      height: 10vh;
     }
     #runButton {
       padding: 10px;
       font-size: 16px;
       cursor: pointer;
-      background: #0f0;
-      color: #000;
-      border: none;
     }
   </style>
 </head>
@@ -93,13 +76,13 @@
   
   <script>
     (function() {
-      // Base64 인코딩/디코딩 (Unicode 안전)
+      // -------------------------
+      // Base64 인코딩/디코딩 (Unicode 지원)
+      // -------------------------
       function base64EncodeUnicode(str) {
-        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-          function(match, p1) {
-            return String.fromCharCode('0x' + p1);
-          }
-        ));
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+          return String.fromCharCode('0x' + p1);
+        }));
       }
       function base64DecodeUnicode(str) {
         return decodeURIComponent(atob(str).split('').map(function(c) {
@@ -107,24 +90,86 @@
         }).join(''));
       }
       
-      // 전역 변수: C++ 코드와 현재까지의 표준 입력 누적
-      var code = "";
-      var stdinBuffer = "";
+      // -------------------------
+      // 전역 변수 (C++ 코드, 누적 표준입력, 마지막 출력)
+      // -------------------------
+      var code = "";           // C++ 코드
+      var inputBuffer = "";    // 사용자가 입력한 누적 표준 입력
+      var lastOutput = "";     // 이전에 API에서 받은 전체 출력
       
-      // Piston API를 이용하여 C++ 코드를 실행하는 함수  
-      // (주의: Piston API는 진정한 인터랙티브 실행을 지원하지 않으므로,
-      //  사용자가 입력한 모든 내용을 STDIN으로 전달하여 프로그램을 새로 실행합니다.)
-      function runCpp(code, stdinBuffer) {
-        var terminal = document.getElementById("terminal");
-        terminal.textContent = "실행 중입니다...\n";
+      // -------------------------
+      // 인터랙티브 터미널 (CMD와 유사) UI 구성
+      // -------------------------
+      function setupInteractiveTerminal() {
+        var contentDiv = document.getElementById("content");
+        contentDiv.innerHTML = "";
+        
+        var container = document.createElement("div");
+        container.id = "terminalContainer";
+        
+        var outputDiv = document.createElement("div");
+        outputDiv.id = "terminalOutput";
+        container.appendChild(outputDiv);
+        
+        var inputDiv = document.createElement("div");
+        inputDiv.id = "terminalInput";
+        
+        var promptSpan = document.createElement("span");
+        promptSpan.id = "prompt";
+        promptSpan.textContent = "C:\\>";
+        inputDiv.appendChild(promptSpan);
+        
+        var inputField = document.createElement("input");
+        inputField.id = "cmdInput";
+        inputField.type = "text";
+        inputField.autocomplete = "off";
+        inputDiv.appendChild(inputField);
+        
+        container.appendChild(inputDiv);
+        contentDiv.appendChild(container);
+        
+        // 포커스 설정
+        inputField.focus();
+        
+        // 사용자 입력 처리 (Enter키)
+        inputField.addEventListener("keydown", function(e) {
+          if (e.key === "Enter") {
+            var cmd = inputField.value;
+            inputField.value = "";
+            // CMD에서는 사용자가 입력한 명령어가 에코되어 출력되므로 이를 추가함.
+            appendToTerminal("C:\\> " + cmd + "\n");
+            // 누적 표준입력에 입력된 명령어를 추가 (개행 포함)
+            inputBuffer += cmd + "\n";
+            runProgram();
+          }
+        });
+        
+        // 최초 실행: 누적 입력이 비어있더라도 프로그램 실행 결과(예: 프롬프트 출력)를 보여줌.
+        runProgram();
+      }
+      
+      // 터미널 출력 영역에 텍스트 추가 (스크롤 자동 하단 이동)
+      function appendToTerminal(text) {
+        var outputDiv = document.getElementById("terminalOutput");
+        outputDiv.textContent += text;
+        outputDiv.scrollTop = outputDiv.scrollHeight;
+      }
+      
+      // -------------------------
+      // Piston API를 이용해 C++ 프로그램 실행 (누적 입력 전달)
+      // -------------------------
+      function runProgram() {
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             language: "cpp",
             version: "10.2.0",
-            files: [{ name: "main.cpp", content: code }],
-            stdin: stdinBuffer
+            files: [{
+              name: "main.cpp",
+              content: code
+            }],
+            stdin: inputBuffer
           })
         })
         .then(function(response) {
@@ -136,88 +181,37 @@
           return response.json();
         })
         .then(function(data) {
-          var output = "";
+          var newOutput = "";
           if (data.run) {
             if (data.run.stdout) {
-              output += data.run.stdout;
+              newOutput += data.run.stdout;
             }
             if (data.run.stderr) {
-              output += data.run.stderr;
+              newOutput += data.run.stderr;
             }
-            output += "\n종료 코드: " + data.run.exitCode;
+            newOutput += "\n종료 코드: " + data.run.exitCode;
           } else {
-            output = "실행 결과를 가져올 수 없습니다.";
+            newOutput = "실행 결과를 가져올 수 없습니다.";
           }
-          terminal.textContent = output;
-          terminal.scrollTop = terminal.scrollHeight;
+          // 누적 출력이 동일한 부분은 제거하고 새롭게 추가된 부분(diff)만 보여줌.
+          var diff = "";
+          if (newOutput.indexOf(lastOutput) === 0) {
+            diff = newOutput.substring(lastOutput.length);
+          } else {
+            diff = newOutput;
+          }
+          lastOutput = newOutput;
+          appendToTerminal(diff + "\n");
         })
         .catch(function(error) {
-          document.getElementById("terminal").textContent = "실행 중 에러 발생: " + error;
+          appendToTerminal("\n[실행 중 에러 발생]: " + error + "\n");
         });
       }
       
-      // 인터랙티브 터미널 UI를 구성하는 함수
-      function showInteractiveTerminal() {
-        var contentDiv = document.getElementById("content");
-        contentDiv.innerHTML = "";
-        
-        var container = document.createElement("div");
-        container.id = "terminalContainer";
-        
-        var terminal = document.createElement("div");
-        terminal.id = "terminal";
-        terminal.textContent = "";  // 초기 출력은 빈 상태
-        container.appendChild(terminal);
-        
-        var inputArea = document.createElement("div");
-        inputArea.id = "inputArea";
-        
-        var inputField = document.createElement("input");
-        inputField.id = "inputField";
-        inputField.type = "text";
-        inputField.placeholder = "입력...";
-        inputArea.appendChild(inputField);
-        
-        var submitButton = document.createElement("button");
-        submitButton.id = "submitButton";
-        submitButton.textContent = "전송";
-        inputArea.appendChild(submitButton);
-        
-        var resetButton = document.createElement("button");
-        resetButton.id = "resetButton";
-        resetButton.textContent = "터미널 리셋";
-        inputArea.appendChild(resetButton);
-        
-        container.appendChild(inputArea);
-        contentDiv.appendChild(container);
-        
-        // 입력 처리: 사용자가 새 입력을 전송하면, 기존 STDIN에 누적하고 전체 내용을 전달하여 재실행
-        function handleInput() {
-          var inputText = inputField.value;
-          if(inputText === "") return;
-          stdinBuffer += inputText + "\n";
-          inputField.value = "";
-          runCpp(code, stdinBuffer);
-        }
-        submitButton.addEventListener("click", handleInput);
-        inputField.addEventListener("keydown", function(e) {
-          if(e.key === "Enter") {
-            e.preventDefault();
-            handleInput();
-          }
-        });
-        // 터미널 리셋: STDIN 누적을 초기화하고 프로그램을 처음부터 다시 실행
-        resetButton.addEventListener("click", function() {
-          stdinBuffer = "";
-          runCpp(code, stdinBuffer);
-        });
-        
-        // 최초 실행 (초기 STDIN으로 실행)
-        runCpp(code, stdinBuffer);
-      }
-      
-      // 초기 코드 및 STDIN 입력 폼을 구성하는 함수
-      function showInitialForm() {
+      // -------------------------
+      // 초기 코드 입력 폼 (C++ 코드와 초기 표준입력 입력)
+      // -------------------------
+      function showInitialInputForm() {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
         var form = document.createElement("form");
@@ -226,55 +220,53 @@
           event.preventDefault();
           var codeText = document.getElementById("codeInput").value;
           var stdinText = document.getElementById("stdinInput").value;
-          if(codeText.trim() === "") return;
+          if (codeText.trim() === "") return;
           code = codeText;
-          stdinBuffer = stdinText;
-          var payload = { code: code, stdin: stdinBuffer };
-          var encoded;
-          try {
-            encoded = base64EncodeUnicode(JSON.stringify(payload));
-          } catch(e) {
-            alert("인코딩 에러: " + e);
-            return;
-          }
-          // URL에 인코딩된 데이터를 기록하여 재접속 시 그대로 유지됨
+          inputBuffer = stdinText;
+          lastOutput = "";
+          // URL에 JSON 페이로드를 인코딩하여 기록 (새로고침 시에도 동일 상태 유지)
+          var payload = { code: code, stdin: inputBuffer };
+          var encoded = base64EncodeUnicode(JSON.stringify(payload));
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
         var codeTextarea = document.createElement("textarea");
         codeTextarea.id = "codeInput";
-        codeTextarea.placeholder = "C++ 코드를 입력하세요.";
+        codeTextarea.placeholder = "여기에 C++ 코드를 입력하세요.";
         form.appendChild(codeTextarea);
         
         var stdinTextarea = document.createElement("textarea");
         stdinTextarea.id = "stdinInput";
-        stdinTextarea.placeholder = "초기 표준 입력 (필요시) 입력하세요.";
+        stdinTextarea.placeholder = "초기 표준 입력을 입력하세요. (Optional)";
         form.appendChild(stdinTextarea);
         
-        var runButton = document.createElement("button");
-        runButton.id = "runButton";
-        runButton.type = "submit";
-        runButton.textContent = "실행";
-        form.appendChild(runButton);
+        var button = document.createElement("button");
+        button.id = "runButton";
+        button.type = "submit";
+        button.textContent = "실행";
+        form.appendChild(button);
         
         contentDiv.appendChild(form);
       }
       
-      // 메인: URL에 인코딩된 데이터가 있으면 인터랙티브 터미널 실행, 없으면 초기 폼 표시
+      // -------------------------
+      // 메인: URL에 인코딩된 데이터가 있으면 인터랙티브 모드, 없으면 초기 입력 폼 표시
+      // -------------------------
       var search = window.location.search;
       if (search && search.indexOf("?=") === 0) {
         var encodedPart = decodeURIComponent(search.substring(2));
         var payload;
         try {
           payload = JSON.parse(base64DecodeUnicode(encodedPart));
-        } catch(e) {
+        } catch (e) {
           payload = { code: base64DecodeUnicode(encodedPart), stdin: "" };
         }
         code = payload.code || "";
-        stdinBuffer = payload.stdin || "";
-        showInteractiveTerminal();
+        inputBuffer = payload.stdin || "";
+        lastOutput = "";
+        setupInteractiveTerminal();
       } else {
-        showInitialForm();
+        showInitialInputForm();
       }
     })();
   </script>
