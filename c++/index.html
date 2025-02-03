@@ -2,23 +2,53 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C++ Code Executor Terminal</title>
+  <title>C++ Interactive Executor Terminal</title>
   <style>
     html, body {
       height: 100%;
       margin: 0;
       font-family: monospace;
-    }
-    /* 터미널 스타일 */
-    #terminal {
-      background-color: #000;
+      background-color: #222;
       color: #0f0;
-      padding: 10px;
+    }
+    /* 터미널 전체 영역 */
+    #terminalContainer {
+      display: flex;
+      flex-direction: column;
       height: 100%;
+    }
+    /* 터미널 출력 영역 */
+    #terminal {
+      flex: 1;
+      padding: 10px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
-    /* 코드 및 표준입력 폼 스타일 */
+    /* 입력 폼 영역 */
+    #inputArea {
+      border-top: 1px solid #0f0;
+      padding: 10px;
+      display: flex;
+    }
+    #inputField {
+      flex: 1;
+      background: #222;
+      color: #0f0;
+      border: none;
+      outline: none;
+      font-family: monospace;
+      font-size: 16px;
+    }
+    #submitButton {
+      background: #0f0;
+      color: #222;
+      border: none;
+      padding: 5px 10px;
+      margin-left: 10px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    /* 입력폼(코드 및 초기 stdin) 스타일 */
     #inputForm {
       display: flex;
       flex-direction: column;
@@ -33,18 +63,18 @@
       padding: 10px;
       margin-bottom: 10px;
       resize: none;
+      box-sizing: border-box;
     }
-    /* 코드 입력창은 높이를 좀 크게 */
     #codeInput {
-      height: 60%;
+      height: 50%;
     }
-    /* 표준 입력창은 높이를 적당히 */
     #stdinInput {
       height: 20%;
     }
     #runButton {
       padding: 10px;
       font-size: 16px;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -53,100 +83,177 @@
   
   <script>
     (function() {
-      // Unicode 문자열을 안전하게 base64로 인코딩하는 함수
+      // -------------------------
+      // Utility: Base64 encoding/decoding for Unicode strings
+      // -------------------------
       function base64EncodeUnicode(str) {
         return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
           return String.fromCharCode('0x' + p1);
         }));
       }
-      
-      // base64를 Unicode 문자열로 안전하게 디코딩하는 함수
       function base64DecodeUnicode(str) {
         return decodeURIComponent(atob(str).split('').map(function(c) {
           return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
       }
       
-      // 터미널 인터페이스 생성 함수
-      function showTerminal(initialText) {
+      // -------------------------
+      // Globals for interactive mode
+      // -------------------------
+      var code = "";           // C++ 코드
+      var stdinBuffer = "";    // 누적 표준 입력 (사용자가 입력한 내용)
+      var prevOutput = "";     // 이전 실행 시 전체 출력 (누적)
+      
+      // -------------------------
+      // Function: Render interactive terminal UI
+      // -------------------------
+      function showInteractiveTerminal() {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
+        
+        // 터미널 컨테이너 (출력 영역 + 입력 영역)
+        var container = document.createElement("div");
+        container.id = "terminalContainer";
+        
+        // 터미널 출력 영역
         var terminal = document.createElement("div");
         terminal.id = "terminal";
-        terminal.textContent = initialText || "";
-        contentDiv.appendChild(terminal);
-        return terminal;
+        terminal.textContent = ""; // 초기에는 빈 상태
+        container.appendChild(terminal);
+        
+        // 입력 영역 (사용자가 새 표준 입력을 입력)
+        var inputArea = document.createElement("div");
+        inputArea.id = "inputArea";
+        
+        var inputField = document.createElement("input");
+        inputField.id = "inputField";
+        inputField.type = "text";
+        inputField.placeholder = "입력...";
+        inputArea.appendChild(inputField);
+        
+        var submitButton = document.createElement("button");
+        submitButton.id = "submitButton";
+        submitButton.textContent = "전송";
+        inputArea.appendChild(submitButton);
+        
+        container.appendChild(inputArea);
+        contentDiv.appendChild(container);
+        
+        // 포커스 설정
+        inputField.focus();
+        
+        // 이벤트: Enter 키 또는 버튼 클릭 시 새 입력 처리
+        function handleInput() {
+          var inputText = inputField.value;
+          if(inputText === "") return;
+          // Append the new input (plus a newline) to the global stdinBuffer
+          stdinBuffer += inputText + "\n";
+          inputField.value = "";
+          runInteractive(); // 재실행
+        }
+        submitButton.addEventListener("click", handleInput);
+        inputField.addEventListener("keydown", function(e) {
+          if(e.key === "Enter") {
+            e.preventDefault();
+            handleInput();
+          }
+        });
       }
       
-      // C++ 코드를 실행하는 함수 (Piston API 사용)
-      function runCppCode(code, stdin) {
-        var terminal = showTerminal("코드를 실행 중입니다...\n\n");
+      // -------------------------
+      // Function: Execute the C++ code with current stdinBuffer using Piston API
+      // 그리고 이전 실행 출력과의 차이를 계산해 터미널에 추가함.
+      // -------------------------
+      function runInteractive() {
+        var terminal = document.getElementById("terminal");
+        // 표시: "실행 중입니다..."
+        // (새로운 실행은 전체 프로그램을 재실행하므로 기존 출력은 재생성됨)
+        terminal.textContent = "";  // 초기화 후 재표시
+        terminal.textContent = prevOutput; // 기존 누적 출력 유지
+        
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             language: "cpp",
-            version: "10.2.0",
+            version: "10.2.0",  // 사용 가능한 C++ 버전 (변경 가능)
             files: [{
               name: "main.cpp",
               content: code
             }],
-            stdin: stdin
+            stdin: stdinBuffer
           })
         })
         .then(function(response) {
           if (!response.ok) {
             return response.json().then(errData => {
-              throw new Error("API 요청 중 오류가 발생했습니다. 상태 코드: " + response.status + " 메시지: " + JSON.stringify(errData));
+              throw new Error("API 요청 오류: 상태 " + response.status + " 메시지: " + JSON.stringify(errData));
             });
           }
           return response.json();
         })
         .then(function(data) {
-          var output = "";
+          var newOutput = "";
           if (data.run) {
+            // 조합: 출력, 에러, 종료 코드 정보를 하나의 문자열로 구성
             if (data.run.stdout) {
-              output += "출력:\n" + data.run.stdout + "\n";
+              newOutput += data.run.stdout;
             }
             if (data.run.stderr) {
-              output += "에러:\n" + data.run.stderr + "\n";
+              newOutput += data.run.stderr;
             }
-            output += "종료 코드: " + data.run.exitCode;
+            newOutput += "\n종료 코드: " + data.run.exitCode;
           } else {
-            output = "실행 결과를 가져올 수 없습니다.";
+            newOutput = "실행 결과를 가져올 수 없습니다.";
           }
-          terminal.textContent = output;
+          // 만약 이전 출력(prevOutput)이 newOutput의 접두어라면,
+          // 새로 추가된 부분만 diff로 취함.
+          var diff = "";
+          if (newOutput.indexOf(prevOutput) === 0) {
+            diff = newOutput.substring(prevOutput.length);
+          } else {
+            diff = newOutput;
+          }
+          // 누적 출력 업데이트
+          prevOutput = newOutput;
+          // 터미널에 새 부분을 추가
+          terminal.textContent = newOutput;
+          // 스크롤을 맨 아래로 이동
+          terminal.scrollTop = terminal.scrollHeight;
         })
         .catch(function(error) {
-          terminal.textContent = "코드 실행 중 에러가 발생했습니다: " + error;
+          var terminal = document.getElementById("terminal");
+          terminal.textContent += "\n[실행 중 에러 발생]: " + error;
+          terminal.scrollTop = terminal.scrollHeight;
         });
       }
       
-      // 코드 및 표준입력을 입력받는 폼 생성 함수
-      function showInputForm() {
+      // -------------------------
+      // Function: Show initial input form for code and initial stdin
+      // -------------------------
+      function showInitialInputForm() {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
         var form = document.createElement("form");
         form.id = "inputForm";
         form.onsubmit = function(event) {
           event.preventDefault();
-          var code = document.getElementById("codeInput").value;
-          var stdin = document.getElementById("stdinInput").value;
-          if(code.trim() === "") return;
-          var payloadObj = {
-            code: code,
-            stdin: stdin
-          };
+          var codeText = document.getElementById("codeInput").value;
+          var stdinText = document.getElementById("stdinInput").value;
+          if(codeText.trim() === "") return;
+          // 전역 변수 설정
+          code = codeText;
+          stdinBuffer = stdinText;
+          prevOutput = "";
+          // 입력 받은 내용을 JSON으로 인코딩하여 URL에 기록 (원본 URL 유지)
+          var payload = { code: code, stdin: stdinBuffer };
           var encoded;
           try {
-            encoded = base64EncodeUnicode(JSON.stringify(payloadObj));
+            encoded = base64EncodeUnicode(JSON.stringify(payload));
           } catch (e) {
-            alert("인코딩 중 에러가 발생했습니다: " + e);
+            alert("인코딩 에러: " + e);
             return;
           }
-          // URL을 현재 도메인과 경로를 유지하면서 ?= 뒤에 인코딩된 JSON을 추가
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
@@ -157,7 +264,7 @@
         
         var stdinTextarea = document.createElement("textarea");
         stdinTextarea.id = "stdinInput";
-        stdinTextarea.placeholder = "여기에 표준 입력을 입력하세요. (Optional)";
+        stdinTextarea.placeholder = "초기 표준 입력을 입력하세요. (예: 초기 입력값이 있다면)";
         form.appendChild(stdinTextarea);
         
         var button = document.createElement("button");
@@ -169,20 +276,30 @@
         contentDiv.appendChild(form);
       }
       
-      // URL에 ?=가 있으면 base64 디코딩 후 JSON 파싱하여 코드와 표준입력 추출, 그렇지 않으면 입력폼 표시
+      // -------------------------
+      // Main: Check URL parameters
+      // -------------------------
       var search = window.location.search;
       if (search && search.indexOf("?=") === 0) {
+        // URL에 ?=가 있으면, 그 뒤의 내용을 base64 디코딩하여 JSON으로 파싱
         var encodedPart = decodeURIComponent(search.substring(2));
-        var payloadObj;
+        var payload;
         try {
-          payloadObj = JSON.parse(base64DecodeUnicode(encodedPart));
+          payload = JSON.parse(base64DecodeUnicode(encodedPart));
         } catch (e) {
-          // 만약 JSON 파싱에 실패하면, 단순 코드로 간주
-          payloadObj = { code: base64DecodeUnicode(encodedPart), stdin: "" };
+          // JSON 파싱 실패시, 단순히 code로 취급
+          payload = { code: base64DecodeUnicode(encodedPart), stdin: "" };
         }
-        runCppCode(payloadObj.code, payloadObj.stdin);
+        code = payload.code || "";
+        stdinBuffer = payload.stdin || "";
+        prevOutput = "";
+        // 인터랙티브 터미널 모드로 전환
+        showInteractiveTerminal();
+        // 최초 실행
+        runInteractive();
       } else {
-        showInputForm();
+        // URL에 인코딩된 데이터가 없으면, 초기 입력 폼을 표시
+        showInitialInputForm();
       }
     })();
   </script>
