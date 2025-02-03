@@ -2,61 +2,59 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C 코드 실행기</title>
+  <title>C 코드 실행 터미널</title>
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
   <style>
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       width: 100%;
+      background: black;
+      color: #00ff00;
       font-family: monospace;
       box-sizing: border-box;
     }
-    /* 터미널 모드 스타일 */
-    .terminal {
-      background-color: black;
-      color: #00ff00;
-      padding: 10px;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      overflow-y: auto;
-      height: 100%;
-    }
-    /* 편집 모드 스타일 */
-    .container {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      padding: 10px;
-    }
-    textarea {
+    /* 터미널 전체 화면 스타일 */
+    #terminal-container {
       width: 100%;
-      box-sizing: border-box;
+      height: 100%;
+    }
+    /* 편집 모드 스타일 (터미널 모드가 아닐 때) */
+    .edit-container {
+      background: white;
+      color: black;
+      height: 100%;
       padding: 10px;
+      box-sizing: border-box;
+    }
+    .edit-container textarea {
+      width: 100%;
+      height: calc(100% - 50px);
+      box-sizing: border-box;
+      font-family: monospace;
       font-size: 16px;
-      resize: none;
       margin-bottom: 10px;
     }
-    .button-container {
-      text-align: center;
-    }
-    button {
-      padding: 10px 20px;
+    .edit-container button {
+      width: 100%;
+      height: 40px;
       font-size: 16px;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="terminal-container"></div>
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
   <script>
-    // Unicode를 지원하는 Base64 인코딩 함수
+    // Unicode를 지원하는 Base64 인코딩 함수 (모든 문자 지원)
     function base64EncodeUnicode(str) {
       return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
         return String.fromCharCode(parseInt(p1, 16));
       }));
     }
-    // Unicode를 지원하는 Base64 디코딩 함수
+    // Unicode를 지원하는 Base64 디코딩 함수 (모든 문자 지원)
     function base64DecodeUnicode(str) {
       return decodeURIComponent(atob(str).split('').map(function(c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
@@ -64,46 +62,52 @@
     }
 
     document.addEventListener("DOMContentLoaded", function() {
-      const app = document.getElementById("app");
       const query = window.location.search;
-      
-      // ?=base64 코드가 있을 경우: 터미널 모드로 전환 (수정/실행 버튼 없이 자동 실행)
       if(query.startsWith("?=") && query.length > 2) {
-        // 터미널 스타일 적용
-        document.body.style.backgroundColor = "black";
-        document.body.style.color = "#00ff00";
-        app.innerHTML = "";
-        const terminal = document.createElement("div");
-        terminal.className = "terminal";
-        terminal.textContent = "컴파일 중...\n";
-        app.appendChild(terminal);
-        
-        // URL의 base64 인코딩된 코드를 디코딩
-        const encodedCode = query.substring(2);
-        let code = "";
-        try {
-          code = base64DecodeUnicode(encodedCode);
-        } catch (e) {
-          terminal.textContent = "오류: 올바르지 않은 base64 인코딩 문자열입니다.";
-          return;
-        }
-        
-        // Piston API를 사용하여 C 코드 컴파일 및 실행 (stdin은 빈 문자열)
+        startTerminalMode();
+      } else {
+        showEditMode();
+      }
+    });
+
+    // 터미널 모드: URL에 ?=base64 인코딩된 C 코드가 있을 때,
+    // xterm.js를 이용해 실제 터미널처럼 동작하도록 구성 (기본적인 입력/출력 상호작용 지원)
+    function startTerminalMode() {
+      const encodedCode = window.location.search.substring(2);
+      let code = "";
+      try {
+        code = base64DecodeUnicode(encodedCode);
+      } catch (e) {
+        alert("오류: 올바르지 않은 base64 인코딩 문자열입니다.");
+        return;
+      }
+      // xterm.js 터미널 인스턴스 생성
+      const term = new Terminal();
+      term.open(document.getElementById('terminal-container'));
+      
+      let commandBuffer = "";
+      let isRunning = false; // 코드 실행 중일 때 입력 무시
+
+      // 프롬프트 출력 함수
+      function prompt() {
+        term.write("\r\n> ");
+      }
+      
+      // Piston API를 사용하여 C 코드를 컴파일/실행하는 함수
+      function runCode(stdinInput) {
+        isRunning = true;
+        term.write("\r\n실행 중...\r\n");
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             language: "c",
             version: "latest",
-            files: [
-              {
-                name: "main.c",
-                content: code
-              }
-            ],
-            stdin: ""
+            files: [{
+              name: "main.c",
+              content: code
+            }],
+            stdin: stdinInput
           })
         })
         .then(response => response.json())
@@ -115,37 +119,72 @@
           if(data.run && data.run.output) {
             output += data.run.output;
           }
-          terminal.textContent = output || "실행 결과가 없습니다.";
+          // 출력이 없을 경우 기본 메시지 출력
+          if(!output) {
+            output = "실행 결과가 없습니다.\r\n";
+          }
+          term.write(output);
+          isRunning = false;
+          prompt();
         })
         .catch(err => {
-          terminal.textContent = "오류 발생: " + err;
+          term.write("오류 발생: " + err + "\r\n");
+          isRunning = false;
+          prompt();
         });
-      
-      // 편집 모드: C 코드를 입력하고 ?=base64 형태의 URL로 전환
-      } else {
-        app.innerHTML = "";
-        const container = document.createElement("div");
-        container.className = "container";
-        
-        const textarea = document.createElement("textarea");
-        textarea.placeholder = "여기에 C 코드를 입력하세요...";
-        container.appendChild(textarea);
-        
-        const buttonContainer = document.createElement("div");
-        buttonContainer.className = "button-container";
-        const runButton = document.createElement("button");
-        runButton.textContent = "실행";
-        runButton.addEventListener("click", function() {
-          const code = textarea.value;
-          const encoded = base64EncodeUnicode(code);
-          const newUrl = window.location.origin + window.location.pathname + "?=" + encoded;
-          window.location.href = newUrl;
-        });
-        buttonContainer.appendChild(runButton);
-        container.appendChild(buttonContainer);
-        app.appendChild(container);
       }
-    });
+      
+      // 초기 실행: 빈 입력으로 실행
+      runCode("");
+
+      // xterm.js의 입력 이벤트 처리 (기본적인 터미널 상호작용 구현)
+      term.onKey(e => {
+        const ev = e.domEvent;
+        const key = e.key;
+        if(isRunning) return; // 실행 중이면 입력 무시
+        if(ev.keyCode === 13) { // Enter 키
+          term.write("\r\n");
+          const input = commandBuffer;
+          commandBuffer = "";
+          runCode(input);
+        } else if(ev.keyCode === 8) { // Backspace 키
+          if (commandBuffer.length > 0) {
+            commandBuffer = commandBuffer.slice(0, -1);
+            // 커서를 한 칸 뒤로 이동 후 지우기
+            term.write("\b \b");
+          }
+        } else if(ev.keyCode >= 32 && ev.keyCode <= 126) { // 일반 출력 가능한 문자
+          commandBuffer += key;
+          term.write(key);
+        }
+      });
+    }
+
+    // 편집 모드: 코드 입력 후 실행할 수 있는 화면 (터미널 모드 아님)
+    function showEditMode() {
+      // 배경 및 글자색을 편집 모드에 맞게 변경
+      document.body.style.background = "white";
+      document.body.style.color = "black";
+      const container = document.createElement("div");
+      container.className = "edit-container";
+      
+      const textarea = document.createElement("textarea");
+      textarea.placeholder = "여기에 C 코드를 입력하세요...";
+      
+      const button = document.createElement("button");
+      button.textContent = "실행";
+      button.addEventListener("click", function() {
+        const code = textarea.value;
+        const encoded = base64EncodeUnicode(code);
+        const newUrl = window.location.origin + window.location.pathname + "?=" + encoded;
+        window.location.href = newUrl;
+      });
+      
+      container.appendChild(textarea);
+      container.appendChild(button);
+      document.getElementById("terminal-container").innerHTML = "";
+      document.getElementById("terminal-container").appendChild(container);
+    }
   </script>
 </body>
 </html>
