@@ -85,19 +85,15 @@
         // 2. namespace와 class 선언 제거
         code = code.split('\n').filter(line => !/^\s*(namespace|class)\b/.test(line)).join('\n');
         
-        // 2.5. 정적 함수 변환: 먼저 Main 함수를 async 함수로 변환 (파라미터의 타입 제거)
+        // 2.5. Main 함수를 async 함수로 변환 (파라미터의 타입 제거)
         code = code.replace(/static\s+void\s+Main\s*\((.*?)\)\s*\{/g, function(match, paramsStr) {
-            let newParams = paramsStr.split(",").map(param => {
-                return param.trim().replace(/\S+\s+/, "");
-            }).join(", ");
+            let newParams = paramsStr.split(",").map(param => param.trim().replace(/\S+\s+/, "")).join(", ");
             return "async function Main(" + newParams + ") {";
         });
-        // 그 후, 나머지 static 함수는 타입 없이 함수 이름과 인자만 남기도록 변환
-        code = code.replace(/static\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, funcName, paramsStr) {
+        // 2.6. 나머지 static 함수 변환: 반환형이 포함된 경우에도 함수 이름을 올바르게 캡처
+        code = code.replace(/static\s+[\w<>\s,]+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, funcName, paramsStr) {
             if (funcName === "Main") return match; // 이미 변환됨
-            let newParams = paramsStr.split(",").map(param => {
-                return param.trim().replace(/\S+\s+/, "");
-            }).join(", ");
+            let newParams = paramsStr.split(",").map(param => param.trim().replace(/\S+\s+/, "")).join(", ");
             return "function " + funcName + "(" + newParams + ") {";
         });
         
