@@ -39,7 +39,6 @@
     
     // 글로벌 변수들 (인터랙티브 터미널 시뮬레이션)
     let accumulatedInput = ""; // 사용자가 입력한 모든 STDIN 누적
-    let lastOutput = "";         // 이전 실행에서 받아온 전체 출력
     let isRunning = false;       // API 실행 중 여부
     let commandBuffer = "";      // 현재 입력 중인 명령줄 버퍼
     let runtimeVersion = "";     // Piston API에서 사용할 C 언어 런타임 버전
@@ -80,7 +79,6 @@
         return;
       }
       
-      // Piston API에 POST 요청: C 코드를 컴파일 및 실행 (누적된 STDIN 전달)
       fetch("https://emkc.org/api/v2/piston/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,26 +99,19 @@
         return response.json();
       })
       .then(data => {
-        let fullOutput = "";
+        let runOutput = "";
         if (data.compile && data.compile.output) {
-          fullOutput += data.compile.output;
+          runOutput += data.compile.output;
         }
         if (data.run && data.run.output) {
-          fullOutput += data.run.output;
+          runOutput += data.run.output;
         }
-        // 불필요한 프롬프트나 앞부분의 공백 제거
-        fullOutput = fullOutput.replace(/^Enter a non-negative integer as the limit for Fibonacci sequence:[^\n]*\r?\n?/, "");
-        fullOutput = fullOutput.replace(/^[\r\n]+/, "");
+        // 불필요한 프롬프트(예: "Enter a non-negative integer as the limit for Fibonacci sequence: ...")를 제거
+        runOutput = runOutput.replace(/^Enter a non-negative integer as the limit for Fibonacci sequence:[^\n]*\r?\n?/, "");
+        runOutput = runOutput.replace(/^[\r\n]+/, "");
         
-        // 이전 실행의 출력(lastOutput) 이후에 추가된 부분만 계산하여 누적 출력
-        let diff = "";
-        if (lastOutput && fullOutput.indexOf(lastOutput) === 0) {
-          diff = fullOutput.substring(lastOutput.length);
-        } else {
-          diff = fullOutput;
-        }
-        lastOutput = fullOutput;
-        term.write(diff);
+        // 터미널에 새 출력을 기존 내용 아래에 계속 누적
+        term.write(runOutput);
         term.write("\r\n> ");
         isRunning = false;
       })
