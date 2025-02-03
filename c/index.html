@@ -37,8 +37,9 @@
       }).join(''));
     }
     
-    // 글로벌 변수들 (인터랙티브 터미널 시뮬레이션)
+    // 글로벌 변수들
     let accumulatedInput = ""; // 사용자가 입력한 모든 STDIN 누적
+    let shownOutput = "";        // 터미널에 누적해서 보여진 전체 출력
     let isRunning = false;       // API 실행 중 여부
     let commandBuffer = "";      // 현재 입력 중인 명령줄 버퍼
     let runtimeVersion = "";     // Piston API에서 사용할 C 언어 런타임 버전
@@ -99,19 +100,20 @@
         return response.json();
       })
       .then(data => {
-        let runOutput = "";
+        let fullOutput = "";
         if (data.compile && data.compile.output) {
-          runOutput += data.compile.output;
+          fullOutput += data.compile.output;
         }
         if (data.run && data.run.output) {
-          runOutput += data.run.output;
+          fullOutput += data.run.output;
         }
-        // 불필요한 프롬프트(예: "Enter a non-negative integer as the limit for Fibonacci sequence: ...")를 제거
-        runOutput = runOutput.replace(/^Enter a non-negative integer as the limit for Fibonacci sequence:[^\n]*\r?\n?/, "");
-        runOutput = runOutput.replace(/^[\r\n]+/, "");
         
-        // 터미널에 새 출력을 기존 내용 아래에 계속 누적
-        term.write(runOutput);
+        // fullOutput는 현재까지의 전체 출력이라고 가정하고,
+        // 이전에 보여준 shownOutput 이후에 추가된 부분만 diff로 계산합니다.
+        let diff = fullOutput.slice(shownOutput.length);
+        shownOutput = fullOutput;
+        
+        term.write(diff);
         term.write("\r\n> ");
         isRunning = false;
       })
