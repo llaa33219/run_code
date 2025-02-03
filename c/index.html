@@ -25,7 +25,7 @@
   <div id="terminal-container"></div>
   <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
   <script>
-    // Base64 인코딩/디코딩 (모든 문자 지원)
+    // Base64 인코딩/디코딩 함수 (모든 문자 지원)
     function base64EncodeUnicode(str) {
       return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
         return String.fromCharCode(parseInt(p1, 16));
@@ -37,34 +37,45 @@
       }).join(''));
     }
     
-    // 터미널 상호작용 시뮬레이션을 위한 변수들
-    let accumulatedInput = ""; // 지금까지 입력된 모든 내용 (STDIN으로 제공됨)
-    let lastOutput = "";         // 마지막으로 받아온 전체 출력 (누적 출력)
-    let isRunning = false;       // API 실행 중이면 true
-    let commandBuffer = "";      // 현재 사용자가 입력 중인 한 줄
+    // 글로벌 변수들 (인터랙티브 터미널 시뮬레이션)
+    let accumulatedInput = ""; // 사용자가 입력한 모든 STDIN 누적
+    let lastOutput = "";         // 이전 실행에서 받아온 전체 출력
+    let isRunning = false;       // API 실행 중 여부
+    let commandBuffer = "";      // 현재 입력 중인 명령줄 버퍼
+    let runtimeVersion = "";     // Piston API에서 사용할 C 언어 런타임 버전
     
-    // xterm.js 터미널 생성
+    // xterm.js 터미널 인스턴스 생성
     const term = new Terminal();
     term.open(document.getElementById("terminal-container"));
     
-    // 터미널에 텍스트를 출력하는 유틸리티 함수
+    // 터미널에 텍스트를 출력하는 함수
     function writeToTerminal(text) {
       term.write(text);
     }
     
-    /**
-     * runInteractive()
-     *   - 현재 URL의 ?= 뒤에 있는 base64 인코딩된 C 코드를 디코딩하여 실행합니다.
-     *   - 누적된 STDIN(accumulatedInput)을 piston API에 전달하여 프로그램 전체 출력을 받아옵니다.
-     *   - 이전에 받은 출력(lastOutput)과 비교해 새로운 부분(diff)만 터미널에 출력합니다.
-     * 
-     * 이 방식은 실제 프로세스의 상태를 유지하지 못하고 매번 전체 프로그램을 처음부터 실행하지만,
-     * 사용자가 입력한 모든 내용(STDIN)을 매번 제공함으로써, scanf 등 입력을 기다리는
-     * 인터랙티브 프로그램도 "누적" 입력을 통해 실행 결과를 갱신하는 효과를 냅니다.
-     */
+    // Piston API에서 C 언어 런타임 버전을 가져오는 함수
+    function fetchCRuntimeVersion() {
+      return fetch("https://emkc.org/api/v2/piston/runtimes")
+        .then(response => response.json())
+        .then(data => {
+          // language가 "c"인 항목을 찾습니다.
+          const cRuntime = data.find(rt => rt.language === "c");
+          if (cRuntime) {
+            runtimeVersion = cRuntime.version;
+          } else {
+            runtimeVersion = "11.2.0"; // fallback 버전
+          }
+        })
+        .catch(err => {
+          runtimeVersion = "11.2.0"; // 오류 발생 시 fallback
+        });
+    }
+    
+    // 누적된 STDIN(accumulatedInput)을 포함하여 C 코드를 실행하는 함수
     function runInteractive() {
       isRunning = true;
-      // URL의 ?= 뒤에 있는 base64 인코딩된 코드를 디코딩
+      
+      // URL의 ?= 뒤에 있는 base64 인코딩된 C 코드를 디코딩
       const encodedCode = window.location.search.substring(2);
       let code = "";
       try {
@@ -75,13 +86,13 @@
         return;
       }
       
-      // Piston API를 사용하여 C 코드를 컴파일 및 실행 (누적된 STDIN 사용)
+      // Piston API에 POST 요청: C 코드를 컴파일 및 실행 (누적된 STDIN 전달)
       fetch("https://emkc.org/api/v2/piston/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           language: "c",
-          version: "latest",
+          version: runtimeVersion,
           files: [
             {
               name: "main.c",
@@ -91,19 +102,23 @@
           stdin: accumulatedInput
         })
       })
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          return response.text().then(text => { throw new Error(text) });
+        }
+        return response.json();
+      })
       .then(data => {
         let fullOutput = "";
-        if(data.compile && data.compile.output) {
+        if (data.compile && data.compile.output) {
           fullOutput += data.compile.output;
         }
-        if(data.run && data.run.output) {
+        if (data.run && data.run.output) {
           fullOutput += data.run.output;
         }
-        // fullOutput는 프로그램의 전체 출력(누적된 STDIN을 반영한 결과)
-        // lastOutput가 이 fullOutput의 접두사라면, 새로 추가된 부분만 diff로 계산합니다.
+        // 기존 출력(lastOutput) 이후에 추가된 부분만 diff로 계산
         let diff = "";
-        if(fullOutput.indexOf(lastOutput) === 0) {
+        if (fullOutput.indexOf(lastOutput) === 0) {
           diff = fullOutput.substring(lastOutput.length);
         } else {
           diff = fullOutput;
@@ -113,35 +128,34 @@
         isRunning = false;
       })
       .catch(err => {
-        writeToTerminal("\r\n오류 발생: " + err + "\r\n");
+        writeToTerminal("\r\n오류 발생: " + err.message + "\r\n");
         isRunning = false;
       });
     }
     
-    // 터미널 시작 시, 현재까지의 입력(accumulatedInput="")으로 실행
-    runInteractive();
+    // 초기 단계: 먼저 C 런타임 버전을 가져온 후 초기 실행 수행
+    fetchCRuntimeVersion().then(() => {
+      runInteractive();
+    });
     
     // xterm.js 키 입력 이벤트 처리 (기본적인 터미널 입력/출력 에뮬레이션)
     term.onKey(e => {
       const ev = e.domEvent;
       const key = e.key;
-      if(isRunning) return; // 실행 중에는 입력 무시
+      if (isRunning) return; // 실행 중에는 입력 무시
       
-      if(ev.keyCode === 13) { // Enter 키
+      if (ev.keyCode === 13) { // Enter 키
         writeToTerminal("\r\n");
-        // 사용자가 입력한 현재 줄(commandBuffer)을 누적 입력에 추가 (개행 포함)
+        // 현재 줄(commandBuffer)을 누적 입력에 추가 (개행 포함)
         accumulatedInput += commandBuffer + "\n";
         commandBuffer = "";
-        // 새 입력을 반영하기 위해 프로그램 재실행
         runInteractive();
-      } else if(ev.keyCode === 8) { // Backspace 키
-        if(commandBuffer.length > 0) {
+      } else if (ev.keyCode === 8) { // Backspace 키
+        if (commandBuffer.length > 0) {
           commandBuffer = commandBuffer.slice(0, -1);
-          // 터미널 상에서 커서를 한 글자 뒤로 이동하며 문자 지우기
           term.write("\b \b");
         }
-      } else if(!ev.altKey && !ev.ctrlKey && !ev.metaKey) {
-        // 일반 출력 가능한 문자
+      } else if (!ev.altKey && !ev.ctrlKey && !ev.metaKey) {
         commandBuffer += key;
         writeToTerminal(key);
       }
