@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>C 코드 뷰어</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: monospace;
+      box-sizing: border-box;
+    }
+    #app {
+      height: 100%;
+      width: 100%;
+    }
+    /* 코드 입력 화면 스타일 */
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    textarea {
+      flex: 1;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      font-size: 16px;
+      resize: none;
+    }
+    .button-container {
+      text-align: center;
+      padding: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    /* 코드 출력 화면 스타일 */
+    pre {
+      margin: 0;
+      padding: 10px;
+      height: 100%;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const app = document.getElementById("app");
+      const query = window.location.search;
+      
+      if(query.startsWith("?=") && query.length > 2) {
+        // URL에 base64 인코딩된 C 코드가 있는 경우 -> 코드 디코딩 후 화면 전체에 출력
+        const encodedCode = query.substring(2);
+        let decodedCode = "";
+        try {
+          decodedCode = atob(encodedCode);
+        } catch (e) {
+          decodedCode = "오류: 올바르지 않은 base64 인코딩 문자열입니다.";
+        }
+        const pre = document.createElement("pre");
+        pre.textContent = decodedCode;
+        app.appendChild(pre);
+      } else {
+        // URL에 base64 인코딩된 코드가 없는 경우 -> 코드 입력창과 실행 버튼 제공
+        const container = document.createElement("div");
+        container.className = "container";
+        
+        const textarea = document.createElement("textarea");
+        textarea.placeholder = "여기에 C 코드를 입력하세요...";
+        
+        const buttonContainer = document.createElement("div");
+        buttonContainer.className = "button-container";
+        
+        const button = document.createElement("button");
+        button.textContent = "실행";
+        button.addEventListener("click", function() {
+          const code = textarea.value;
+          let encoded = "";
+          try {
+            encoded = btoa(code);
+          } catch(e) {
+            alert("인코딩 오류: 코드에 ASCII 이외의 문자가 포함되어 있을 수 있습니다.");
+            return;
+          }
+          // 현재 URL에 base64 인코딩된 코드를 추가하여 이동
+          const newUrl = window.location.origin + window.location.pathname + "?=" + encoded;
+          window.location.href = newUrl;
+        });
+        
+        buttonContainer.appendChild(button);
+        container.appendChild(textarea);
+        container.appendChild(buttonContainer);
+        app.appendChild(container);
+      }
+    });
+  </script>
+</body>
+</html>
