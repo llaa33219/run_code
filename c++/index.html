@@ -74,7 +74,7 @@
       // C++ 코드를 실행하는 함수 (Piston API 사용)
       function runCppCode(code) {
         var terminal = showTerminal("코드를 실행 중입니다...\n\n");
-        // 수정: API에 보낼 페이로드의 version을 "17"로 변경하여 올바른 runtime 사용
+        // Piston API에서 지원하는 올바른 C++ runtime 버전 사용: "10.2.0"
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
           headers: {
@@ -82,7 +82,7 @@
           },
           body: JSON.stringify({
             language: "cpp",
-            version: "17",
+            version: "10.2.0",
             files: [{
               name: "main.cpp",
               content: code
@@ -135,7 +135,7 @@
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
           }
-          // 현재 URL의 도메인과 경로는 그대로 두고 쿼리스트링에 ?=base64코드를 추가
+          // 현재 URL의 도메인과 경로를 그대로 두고 쿼리스트링에 ?=base64코드를 추가
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
