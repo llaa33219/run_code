@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C 코드 뷰어</title>
+  <title>C 코드 실행기</title>
   <style>
     html, body {
       margin: 0;
@@ -16,52 +16,61 @@
       height: 100%;
       width: 100%;
     }
-    /* 코드 입력 화면 스타일 */
     .container {
       display: flex;
       flex-direction: column;
       height: 100%;
+      padding: 10px;
     }
     textarea {
-      flex: 1;
       width: 100%;
       box-sizing: border-box;
       padding: 10px;
       font-size: 16px;
       resize: none;
     }
+    .code-display {
+      flex: 1;
+      margin-bottom: 10px;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+    }
+    .input-area {
+      height: 100px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+    }
     .button-container {
       text-align: center;
-      padding: 10px;
+      margin-bottom: 10px;
     }
     button {
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
     }
-    /* 코드 출력 화면 스타일 */
     pre {
-      margin: 0;
+      background: #e8e8e8;
       padding: 10px;
-      height: 100%;
+      border: 1px solid #ccc;
       overflow: auto;
       white-space: pre-wrap;
       word-wrap: break-word;
-      box-sizing: border-box;
+      height: 200px;
     }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <script>
-    // Unicode를 지원하는 Base64 인코딩 함수 (한글, 영어 등 모든 문자 지원)
+    // Unicode를 지원하는 Base64 인코딩 함수 (모든 문자 지원)
     function base64EncodeUnicode(str) {
       return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
         return String.fromCharCode(parseInt(p1, 16));
       }));
     }
 
-    // Unicode를 지원하는 Base64 디코딩 함수 (한글, 영어 등 모든 문자 지원)
+    // Unicode를 지원하는 Base64 디코딩 함수 (모든 문자 지원)
     function base64DecodeUnicode(str) {
       return decodeURIComponent(atob(str).split('').map(function(c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
@@ -73,24 +82,20 @@
       const query = window.location.search;
       
       if(query.startsWith("?=") && query.length > 2) {
-        // URL에 base64 인코딩된 C 코드가 있는 경우 -> 코드 디코딩 후 화면 전체에 출력
-        const encodedCode = query.substring(2);
-        let decodedCode = "";
-        try {
-          decodedCode = base64DecodeUnicode(encodedCode);
-        } catch (e) {
-          decodedCode = "오류: 올바르지 않은 base64 인코딩 문자열입니다.";
-        }
-        const pre = document.createElement("pre");
-        pre.textContent = decodedCode;
-        app.appendChild(pre);
+        showExecutionMode();
       } else {
-        // URL에 base64 인코딩된 코드가 없는 경우 -> 코드 입력창과 실행 버튼 제공
+        showEditMode();
+      }
+
+      // 편집 모드: 사용자가 C 코드를 입력하면 base64 인코딩 후 URL에 추가하여 실행 모드로 전환
+      function showEditMode() {
+        app.innerHTML = "";
         const container = document.createElement("div");
         container.className = "container";
         
         const textarea = document.createElement("textarea");
         textarea.placeholder = "여기에 C 코드를 입력하세요...";
+        textarea.style.flex = "1";
         
         const buttonContainer = document.createElement("div");
         buttonContainer.className = "button-container";
@@ -99,9 +104,8 @@
         button.textContent = "실행";
         button.addEventListener("click", function() {
           const code = textarea.value;
-          // Unicode 인코딩 함수를 사용하여 모든 문자가 올바르게 base64로 인코딩됩니다.
           const encoded = base64EncodeUnicode(code);
-          // 현재 URL에 base64 인코딩된 코드를 추가하여 이동
+          // URL에 인코딩된 코드를 추가하여 실행 모드로 이동
           const newUrl = window.location.origin + window.location.pathname + "?=" + encoded;
           window.location.href = newUrl;
         });
@@ -109,6 +113,105 @@
         buttonContainer.appendChild(button);
         container.appendChild(textarea);
         container.appendChild(buttonContainer);
+        app.appendChild(container);
+      }
+
+      // 실행 모드: URL에 있는 base64 인코딩된 C 코드를 디코딩하여 실행 인터페이스 제공
+      function showExecutionMode() {
+        app.innerHTML = "";
+        const container = document.createElement("div");
+        container.className = "container";
+        
+        // URL에서 base64 인코딩된 코드를 디코딩
+        const encodedCode = window.location.search.substring(2);
+        let code = "";
+        try {
+          code = base64DecodeUnicode(encodedCode);
+        } catch (e) {
+          code = "오류: 올바르지 않은 base64 인코딩 문자열입니다.";
+        }
+        
+        // 코드 표시 영역 (읽기 전용)
+        const codeDisplay = document.createElement("textarea");
+        codeDisplay.className = "code-display";
+        codeDisplay.readOnly = true;
+        codeDisplay.value = code;
+        
+        // 표준 입력(stdin) 입력 영역
+        const inputArea = document.createElement("textarea");
+        inputArea.className = "input-area";
+        inputArea.placeholder = "프로그램 입력값 (stdin)을 입력하세요...";
+        
+        // 코드 실행 버튼
+        const runButtonContainer = document.createElement("div");
+        runButtonContainer.className = "button-container";
+        const runButton = document.createElement("button");
+        runButton.textContent = "코드 실행";
+        runButtonContainer.appendChild(runButton);
+        
+        // 실행 결과 출력 영역
+        const outputDisplay = document.createElement("pre");
+        outputDisplay.textContent = "";
+        
+        runButton.addEventListener("click", function() {
+          runButton.disabled = true;
+          runButton.textContent = "실행 중...";
+          const stdinInput = inputArea.value;
+          // Piston API를 이용하여 C 코드를 컴파일 및 실행
+          fetch("https://emkc.org/api/v2/piston/execute", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              language: "c",
+              version: "latest",
+              files: [
+                {
+                  name: "main.c",
+                  content: code
+                }
+              ],
+              stdin: stdinInput
+            })
+          })
+          .then(response => response.json())
+          .then(data => {
+            let result = "";
+            // 컴파일 에러가 있는 경우 compile.output에 출력됨
+            if(data.compile && data.compile.output) {
+              result += data.compile.output;
+            }
+            // 실행 결과가 run.output에 출력됨
+            if(data.run && data.run.output) {
+              result += data.run.output;
+            }
+            outputDisplay.textContent = result || "실행 결과가 없습니다.";
+            runButton.disabled = false;
+            runButton.textContent = "코드 실행";
+          })
+          .catch(err => {
+            outputDisplay.textContent = "오류 발생: " + err;
+            runButton.disabled = false;
+            runButton.textContent = "코드 실행";
+          });
+        });
+        
+        // 수정 모드로 돌아가는 버튼
+        const backButtonContainer = document.createElement("div");
+        backButtonContainer.className = "button-container";
+        const backButton = document.createElement("button");
+        backButton.textContent = "수정하기";
+        backButton.addEventListener("click", function() {
+          window.location.href = window.location.origin + window.location.pathname;
+        });
+        backButtonContainer.appendChild(backButton);
+        
+        container.appendChild(codeDisplay);
+        container.appendChild(inputArea);
+        container.appendChild(runButtonContainer);
+        container.appendChild(outputDisplay);
+        container.appendChild(backButtonContainer);
         app.appendChild(container);
       }
     });
