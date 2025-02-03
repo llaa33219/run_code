@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C# 코드 실행기 및 인코더 (고급 간이 C# 인터프리터)</title>
+  <title>C# 코드 실행기 및 인코더 (간이 고급 C# 인터프리터)</title>
   <style>
     html, body {
       margin: 0;
@@ -60,7 +60,7 @@
         return decodeURIComponent(escape(atob(str)));
     }
     
-    // 고급 C# → JavaScript 변환 함수 (간이 인터프리터)
+    // 고급 C# → JavaScript 변환 함수
     function convertCSharpToJS(code) {
         // 1. using 문 제거
         code = code.split('\n').filter(line => !/^\s*using\s+/.test(line)).join('\n');
@@ -68,7 +68,7 @@
         // 2. namespace와 class 선언 제거
         code = code.split('\n').filter(line => !/^\s*(namespace|class)\b/.test(line)).join('\n');
         
-        // 3. Main 메서드가 있다면 그 내부만 추출 (아주 단순하게 처리)
+        // 3. Main 메서드가 있으면 그 내부만 추출 (아주 단순하게 처리)
         if(/static\s+void\s+Main\s*\(/.test(code)) {
             let mainIndex = code.indexOf("static void Main");
             let braceStart = code.indexOf("{", mainIndex);
@@ -83,41 +83,66 @@
             }
         }
         
-        // 4. 데이터 타입 선언(int, double, float, string, bool)을 var로 치환
+        // 4. XML 문서 주석(///) 제거
+        code = code.split('\n').filter(line => !/^\s*\/\/\/.*/.test(line)).join('\n');
+        
+        // 5. 기본 자료형 선언 치환 (int, double, float, string, bool → var)
         code = code.replace(/\b(int|double|float|string|bool)\s+/g, "var ");
         
-        // 5. Boolean 리터럴 대소문자 수정 (C#는 True/False, JS는 true/false)
+        // 6. List<long> 타입 제거
+        code = code.replace(/List<\s*long\s*>/g, "");
+        
+        // 7. Boolean 리터럴 대소문자 수정 (True/False → true/false)
         code = code.replace(/\bTrue\b/g, "true");
         code = code.replace(/\bFalse\b/g, "false");
         
-        // 6. 간단한 형 변환 제거: (int), (double), (float), (string), (bool)
+        // 8. 간단한 형 변환 제거: (int), (double), (float), (string), (bool)
         code = code.replace(/\((int|double|float|string|bool)\)/g, "");
         
-        // 7. Console.WriteLine 및 Console.Write 를 print로 변경
+        // 9. Console.Out.Flush() 제거
+        code = code.replace(/Console\.Out\.Flush\s*\(\s*\)\s*;?/g, "");
+        
+        // 10. Console.WriteLine, Console.Write, Console.Error.WriteLine → print
         code = code.replace(/Console\.WriteLine\s*\(/g, "print(");
         code = code.replace(/Console\.Write\s*\(/g, "print(");
+        code = code.replace(/Console\.Error\.WriteLine\s*\(/g, "print(");
         
-        // 8. Console.ReadLine() 를 prompt('Input:') 로 변경
+        // 11. Console.ReadLine() → prompt('Input:')
         code = code.replace(/Console\.ReadLine\s*\(\s*\)/g, "prompt('Input:')");
         
-        // 9. 함수(메서드) 정의 변환  
-        //    - public static 메서드 변환: 예) public static int Sum(int a, int b) {  => function Sum(a, b) {
+        // 12. new ArgumentException → new Error
+        code = code.replace(/new\s+ArgumentException\s*\(/g, "new Error(");
+        
+        // 13. new List<long> { ... } → [ ... ]
+        code = code.replace(/new\s+List<\s*long\s*>\s*\{([^}]+)\}/g, "[$1]");
+        
+        // 14. .Add( → .push(
+        code = code.replace(/\.Add\s*\(/g, ".push(");
+        
+        // 15. .Count → .length
+        code = code.replace(/\.Count\b/g, ".length");
+        
+        // 16. string.Join(", ", 변수) → 변수.join(', ')
+        code = code.replace(/string\.Join\s*\(\s*["']\s*,\s*["']\s*,\s*([^)]+)\)/g, "$1.join(', ')");
+        
+        // 17. long.TryParse 구문 변환
+        //     원본: if (!long.TryParse(input, out long limit)) { ... }
+        //     변환: var limit = parseInt(input); if (isNaN(limit)) { print('Error: 유효한 숫자를 입력하세요.'); return; }
+        code = code.replace(/if\s*\(\s*!long\.TryParse\s*\(\s*input\s*,\s*out\s+long\s+limit\s*\)\s*\)\s*\{[\s\S]*?\}/, "var limit = parseInt(input);\nif (isNaN(limit)) { print('Error: 유효한 숫자를 입력하세요.'); return; }");
+        
+        // 18. public static 및 public 함수(메서드) 정의 변환 → function 함수명(인자) {
         code = code.replace(/public\s+static\s+\w+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, p1, p2) {
             let params = p2.split(',').map(param => {
                 return param.trim().replace(/\b(int|double|float|string|bool)\s+/, "");
             }).join(', ');
             return "function " + p1 + "(" + params + ") {";
         });
-        //    - public 인스턴스 메서드 변환: 예) public int Multiply(int a, int b) {  => function Multiply(a, b) {
         code = code.replace(/public\s+\w+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, p1, p2) {
             let params = p2.split(',').map(param => {
                 return param.trim().replace(/\b(int|double|float|string|bool)\s+/, "");
             }).join(', ');
             return "function " + p1 + "(" + params + ") {";
         });
-        
-        // 10. if, else, for, while, switch 등은 C#와 문법이 유사하므로 그대로 둡니다.
-        // (필요시 추가적인 변환 규칙을 여기서 더 넣을 수 있습니다.)
         
         return code;
     }
@@ -126,7 +151,7 @@
     const query = window.location.search;
     
     if(query.startsWith('?=')) {
-        // 터미널 모드: URL에 base64 인코딩된 C# 코드가 있으면 변환 후 실행 결과 출력
+        // 터미널 모드: URL에 base64 인코딩된 C# 코드가 있으면 변환 후 실행
         document.body.style.background = "#000";
         container.style.background = "#000";
         container.style.color = "lime";
@@ -150,7 +175,7 @@
         // 변환 함수 적용
         let convertedCode = convertCSharpToJS(originalCode);
         
-        // 디버그: 변환된 코드를 확인하려면 아래 주석을 해제하세요.
+        // 디버그가 필요하면 아래 주석을 해제하세요.
         // outputPre.textContent = "=== Converted Code ===\n" + convertedCode + "\n\n=== Execution Output ===\n";
         
         // print 함수 정의 (출력은 outputPre에 누적)
@@ -159,7 +184,7 @@
         }
         
         try {
-            // Function 생성자를 이용해 변환된 코드를 실행합니다.
+            // 변환된 코드를 실행합니다.
             new Function("print", convertedCode)(print);
         } catch(e) {
             outputPre.textContent += "\n실행 중 오류: " + e.message;
@@ -167,7 +192,7 @@
     } else {
         // 코드 입력 모드: 코드 입력창과 실행 버튼 제공
         const textarea = document.createElement('textarea');
-        textarea.placeholder = "여기에 C# 코드를 입력하세요.\n\n예시 1:\nint a = 3;\nint b = 4;\nConsole.WriteLine(a + b);\n\n예시 2:\npublic static int Sum(int a, int b) {\n  return a + b;\n}\nstatic void Main() {\n  Console.WriteLine(Sum(5, 7));\n}\n\n예시 3 (조건문/반복문):\nint i = 0;\nwhile(i < 5) {\n  Console.WriteLine(i);\n  i = i + 1;\n}";
+        textarea.placeholder = "여기에 C# 코드를 입력하세요.\n\n예시:\n\nusing System;\nusing System.Collections.Generic;\n\nnamespace FibonacciGeneratorApp\n{\n    class Program\n    {\n        static List<long> GenerateFibonacci(long limit)\n        {\n            if (limit < 0)\n            {\n                throw new ArgumentException(\"Limit must be a non-negative integer.\");\n            }\n\n            List<long> sequence = new List<long> { 0 };\n            if (limit >= 1)\n            {\n                sequence.Add(1);\n            }\n            while (true)\n            {\n                int count = sequence.Count;\n                long next = sequence[count - 1] + sequence[count - 2];\n                if (next > limit)\n                {\n                    break;\n                }\n                sequence.Add(next);\n            }\n            return sequence;\n        }\n\n        static void Main(string[] args)\n        {\n            Console.Write(\"Enter a non-negative integer as the limit for Fibonacci sequence: \");\n            Console.Out.Flush();\n\n            string input = Console.ReadLine();\n            if (!long.TryParse(input, out long limit))\n            {\n                Console.Error.WriteLine(\"Error: 유효한 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit < 0)\n            {\n                Console.Error.WriteLine(\"Error: 음이 아닌 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit == 0)\n            {\n                Console.WriteLine(\"Fibonacci sequence (limit 0): 0\");\n                return;\n            }\n\n            try\n            {\n                List<long> fibonacciNumbers = GenerateFibonacci(limit);\n                Console.WriteLine(\"Fibonacci sequence (up to {0}):\", limit);\n                Console.WriteLine(string.Join(\", \", fibonacciNumbers));\n            }\n            catch (Exception ex)\n            {\n                Console.Error.WriteLine(\"오류: \" + ex.Message);\n            }\n        }\n    }\n}\n";
         container.appendChild(textarea);
         
         const button = document.createElement('button');
