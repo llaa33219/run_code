@@ -99,7 +99,7 @@
         // 디코딩된 Lua 코드 실행
         var status = lauxlib.luaL_dostring(L, decodedCode);
         if (status !== lua.LUA_OK) {
-          var errMsg = lua.lua_tojsstring(L, -1);
+          var errMsg = lua.lua_isstring(L, -1) ? lua.lua_tojsstring(L, -1) : "Unknown error";
           output.textContent += "\nLua Error: " + errMsg;
         }
       } else {
