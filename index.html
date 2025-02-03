@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>C++ Interactive Executor Terminal</title>
+  <!-- xterm.js CSS (원본 그대로) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #content {
+      height: 100%;
+    }
+    /* 간단한 코드 입력 폼 스타일 */
+    #codeForm {
+      padding: 10px;
+    }
+    #codeInput {
+      width: 100%;
+      height: 300px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    #runBtn {
+      margin-top: 10px;
+      padding: 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <!-- interactive 터미널 영역 (쿼리스트링이 있으면 사용되고, 없으면 코드 입력 폼이 표시됨) -->
+  <div id="content"></div>
+  
+  <!-- xterm.js (원본 그대로) -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+  <script>
+    /******************************************
+     * 유틸리티 함수: Unicode 안전 base64 인코딩/디코딩
+     ******************************************/
+    function base64EncodeUnicode(str) {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+        return String.fromCharCode('0x' + p1);
+      }));
+    }
+    function base64DecodeUnicode(str) {
+      return decodeURIComponent(atob(str).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+    }
+    
+    /******************************************
+     * URL 업데이트 함수: 현재 코드와 누적 입력값을 쿼리스트링에 반영
+     ******************************************/
+    function updateURL() {
+      var payload = { code: code, stdin: cumulativeInput };
+      var encoded = base64EncodeUnicode(JSON.stringify(payload));
+      var newURL = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
+      history.replaceState(null, "", newURL);
+    }
+    
+    /******************************************
+     * xterm.js 기반 프롬프트 함수
+     * term: xterm.js Terminal 인스턴스
+     * promptStr: 프롬프트 문자열 (예: "> ")
+     * callback: 사용자가 엔터 입력 시 콜백 (입력된 문자열 인자 전달)
+     ******************************************/
+    function promptInput(term, promptStr, callback) {
+      term.write(promptStr);
+      let input = "";
+      // onKey의 리스너는 disposable을 반환하므로, 엔터 입력 후 dispose 처리
+      const disposable = term.onKey(e => {
+        const char = e.key;
+        if (char === "\r") { // 엔터
+          term.write("\r\n");
+          disposable.dispose();
+          callback(input);
+        } else if (char === "\u007F") { // 백스페이스
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            term.write("\b \b");
+          }
+        } else {
+          input += char;
+          term.write(char);
+        }
+      });
+    }
+    
+    /******************************************
+     * 전역 변수
+     ******************************************/
+    let code = "";              // 실행할 C++ 코드
+    let cumulativeInput = "";   // 사용자가 입력한 누적 표준 입력값 (stdin)
+    let previousOutput = "";    // 이전 실행 시 출력된 전체 텍스트
+    const term = new Terminal(); // xterm.js 터미널 인스턴스
+    
+    /******************************************
+     * 인터랙티브 실행 함수
+     * - Piston API를 호출하여, 현재 code와 cumulativeInput(표준 입력값)을 전달하고,
+     *   반환된 전체 출력값(fullOutput)에서 이전 출력(previousOutput) 이후의 새 출력(newText)만을 터미널에 추가.
+     * - 그 후 프롬프트를 띄워 사용자의 추가 입력을 받고, 입력 후 누적 입력에 추가한 뒤 재실행.
+     ******************************************/
+    function interactiveRun() {
+      updateURL(); // URL에 현재 상태 업데이트
+      term.write("\r\n[코드 실행 중...]\r\n");
+      fetch("https://emkc.org/api/v2/piston/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          language: "cpp",
+          version: "10.2.0",
+          files: [{
+            name: "main.cpp",
+            content: code
+          }],
+          stdin: cumulativeInput
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { 
+            throw new Error("상태 코드: " + response.status + " 메시지: " + JSON.stringify(err));
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        let fullOutput = "";
+        if (data.run) {
+          if (data.run.stdout) fullOutput += data.run.stdout;
+          if (data.run.stderr) fullOutput += data.run.stderr;
+          fullOutput += "\r\n[종료 코드: " + data.run.exitCode + "]\r\n";
+        } else {
+          fullOutput = "실행 결과를 가져올 수 없습니다.\r\n";
+        }
+        // 이전 출력과 비교하여 새로 추가된 부분만 추출
+        let newText = fullOutput;
+        if (previousOutput && fullOutput.indexOf(previousOutput) === 0) {
+          newText = fullOutput.substring(previousOutput.length);
+        }
+        term.write(newText);
+        previousOutput = fullOutput;
+        // 프롬프트를 띄워 사용자 입력을 받음 (실제 터미널처럼)
+        promptInput(term, "> ", function(userInput) {
+          term.write(userInput + "\r\n");
+          cumulativeInput += userInput + "\n";
+          interactiveRun();
+        });
+      })
+      .catch(error => {
+        term.write("\r\n코드 실행 중 에러가 발생했습니다: " + error + "\r\n");
+        promptInput(term, "> ", function(userInput) {
+          term.write(userInput + "\r\n");
+          cumulativeInput += userInput + "\n";
+          interactiveRun();
+        });
+      });
+    }
+    
+    /******************************************
+     * 초기 실행: URL의 쿼리스트링이 있으면 인터랙티브 모드, 없으면 코드 입력 폼 표시
+     ******************************************/
+    (function() {
+      const search = window.location.search;
+      if (search && search.indexOf("?=") === 0) {
+        const encodedPart = decodeURIComponent(search.substring(2));
+        let payload;
+        try {
+          payload = JSON.parse(base64DecodeUnicode(encodedPart));
+        } catch(e) {
+          term.write("payload 디코딩 에러: " + e + "\r\n");
+        }
+        if (payload && payload.code) {
+          code = payload.code;
+          cumulativeInput = payload.stdin || "";
+          // 터미널 영역에 xterm.js를 적용
+          term.open(document.getElementById("content"));
+          interactiveRun();
+        } else {
+          term.write("잘못된 payload입니다. 코드 입력 폼으로 이동합니다.\r\n");
+          setTimeout(showCodeInputForm, 2000);
+        }
+      } else {
+        showCodeInputForm();
+      }
+    })();
+    
+    /******************************************
+     * 코드 입력 폼 표시 함수 (터미널 모드가 아닌 경우)
+     ******************************************/
+    function showCodeInputForm() {
+      document.body.innerHTML = `
+        <div id="codeForm">
+          <textarea id="codeInput" placeholder="여기에 C++ 코드를 입력하세요."></textarea><br>
+          <button id="runBtn">실행</button>
+        </div>`;
+      document.getElementById("runBtn").addEventListener("click", function() {
+        const userCode = document.getElementById("codeInput").value;
+        if (userCode.trim() === "") return;
+        code = userCode;
+        cumulativeInput = "";
+        previousOutput = "";
+        updateURL();
+        // 터미널 영역으로 전환
+        document.body.innerHTML = '<div id="content" style="height:100%;"></div>';
+        term.open(document.getElementById("content"));
+        interactiveRun();
+      });
+    }
+  </script>
+</body>
+</html>
