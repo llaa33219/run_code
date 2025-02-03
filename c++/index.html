@@ -18,7 +18,7 @@
       overflow-y: auto;
       white-space: pre-wrap;
     }
-    /* 코드 입력 폼 스타일 */
+    /* 코드 및 표준입력 폼 스타일 */
     #inputForm {
       display: flex;
       flex-direction: column;
@@ -26,16 +26,23 @@
       padding: 10px;
       box-sizing: border-box;
     }
-    #codeInput {
-      flex: 1;
+    #codeInput, #stdinInput {
       width: 100%;
       font-family: monospace;
       font-size: 14px;
       padding: 10px;
+      margin-bottom: 10px;
       resize: none;
     }
+    /* 코드 입력창은 높이를 좀 크게 */
+    #codeInput {
+      height: 60%;
+    }
+    /* 표준 입력창은 높이를 적당히 */
+    #stdinInput {
+      height: 20%;
+    }
     #runButton {
-      margin-top: 10px;
       padding: 10px;
       font-size: 16px;
     }
@@ -60,7 +67,7 @@
         }).join(''));
       }
       
-      // 터미널 인터페이스를 생성하는 함수
+      // 터미널 인터페이스 생성 함수
       function showTerminal(initialText) {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
@@ -72,9 +79,8 @@
       }
       
       // C++ 코드를 실행하는 함수 (Piston API 사용)
-      function runCppCode(code) {
+      function runCppCode(code, stdin) {
         var terminal = showTerminal("코드를 실행 중입니다...\n\n");
-        // Piston API에서 지원하는 올바른 C++ runtime 버전 사용: "10.2.0"
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
           headers: {
@@ -87,7 +93,7 @@
               name: "main.cpp",
               content: code
             }],
-            stdin: ""
+            stdin: stdin
           })
         })
         .then(function(response) {
@@ -118,7 +124,7 @@
         });
       }
       
-      // 코드 입력 폼을 생성하는 함수
+      // 코드 및 표준입력을 입력받는 폼 생성 함수
       function showInputForm() {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
@@ -127,22 +133,32 @@
         form.onsubmit = function(event) {
           event.preventDefault();
           var code = document.getElementById("codeInput").value;
+          var stdin = document.getElementById("stdinInput").value;
           if(code.trim() === "") return;
+          var payloadObj = {
+            code: code,
+            stdin: stdin
+          };
           var encoded;
           try {
-            encoded = base64EncodeUnicode(code);
+            encoded = base64EncodeUnicode(JSON.stringify(payloadObj));
           } catch (e) {
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
           }
-          // 현재 URL의 도메인과 경로를 그대로 두고 쿼리스트링에 ?=base64코드를 추가
+          // URL을 현재 도메인과 경로를 유지하면서 ?= 뒤에 인코딩된 JSON을 추가
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
-        var textarea = document.createElement("textarea");
-        textarea.id = "codeInput";
-        textarea.placeholder = "여기에 C++ 코드를 입력하세요.";
-        form.appendChild(textarea);
+        var codeTextarea = document.createElement("textarea");
+        codeTextarea.id = "codeInput";
+        codeTextarea.placeholder = "여기에 C++ 코드를 입력하세요.";
+        form.appendChild(codeTextarea);
+        
+        var stdinTextarea = document.createElement("textarea");
+        stdinTextarea.id = "stdinInput";
+        stdinTextarea.placeholder = "여기에 표준 입력을 입력하세요. (Optional)";
+        form.appendChild(stdinTextarea);
         
         var button = document.createElement("button");
         button.id = "runButton";
@@ -153,19 +169,18 @@
         contentDiv.appendChild(form);
       }
       
-      // URL의 쿼리스트링을 확인하여 ?= 로 시작하면 base64 디코딩 후 코드 실행, 그렇지 않으면 입력폼 표시
+      // URL에 ?=가 있으면 base64 디코딩 후 JSON 파싱하여 코드와 표준입력 추출, 그렇지 않으면 입력폼 표시
       var search = window.location.search;
       if (search && search.indexOf("?=") === 0) {
-        // "?=" 뒤에 오는 base64 인코딩된 문자열 추출 (decodeURIComponent로 원본 그대로 복원)
         var encodedPart = decodeURIComponent(search.substring(2));
-        var code;
+        var payloadObj;
         try {
-          code = base64DecodeUnicode(encodedPart);
+          payloadObj = JSON.parse(base64DecodeUnicode(encodedPart));
         } catch (e) {
-          showTerminal("base64 디코딩 중 에러가 발생했습니다: " + e);
-          return;
+          // 만약 JSON 파싱에 실패하면, 단순 코드로 간주
+          payloadObj = { code: base64DecodeUnicode(encodedPart), stdin: "" };
         }
-        runCppCode(code);
+        runCppCode(payloadObj.code, payloadObj.stdin);
       } else {
         showInputForm();
       }
