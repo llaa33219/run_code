@@ -74,7 +74,7 @@
       // C++ 코드를 실행하는 함수 (Piston API 사용)
       function runCppCode(code) {
         var terminal = showTerminal("코드를 실행 중입니다...\n\n");
-        // API에 보낼 페이로드에서 불필요한 옵션들은 제거 (400 Bad Request 오류 해결)
+        // 수정: API에 보낼 페이로드의 version을 "17"로 변경하여 올바른 runtime 사용
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
           headers: {
@@ -82,7 +82,7 @@
           },
           body: JSON.stringify({
             language: "cpp",
-            version: "11.2.0",
+            version: "17",
             files: [{
               name: "main.cpp",
               content: code
@@ -127,7 +127,7 @@
         form.onsubmit = function(event) {
           event.preventDefault();
           var code = document.getElementById("codeInput").value;
-          if (code.trim() === "") return;
+          if(code.trim() === "") return;
           var encoded;
           try {
             encoded = base64EncodeUnicode(code);
@@ -135,7 +135,7 @@
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
           }
-          // 현재 URL의 도메인과 경로를 그대로 두고 쿼리스트링에 ?=base64코드를 추가
+          // 현재 URL의 도메인과 경로는 그대로 두고 쿼리스트링에 ?=base64코드를 추가
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
