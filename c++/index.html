@@ -46,6 +46,20 @@
   
   <script>
     (function() {
+      // Unicode 문자열을 안전하게 base64로 인코딩하는 함수
+      function base64EncodeUnicode(str) {
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+          return String.fromCharCode('0x' + p1);
+        }));
+      }
+      
+      // base64를 Unicode 문자열로 안전하게 디코딩하는 함수
+      function base64DecodeUnicode(str) {
+        return decodeURIComponent(atob(str).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+      }
+      
       // base64 디코딩 후 코드를 화면에 표시하는 함수
       function showCode(decodedCode) {
         var contentDiv = document.getElementById("content");
@@ -68,7 +82,7 @@
           if(code.trim() === "") return;
           var encoded;
           try {
-            encoded = btoa(code);
+            encoded = base64EncodeUnicode(code);
           } catch(e) {
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
@@ -98,7 +112,7 @@
         var encodedPart = decodeURIComponent(search.substring(2));
         var decodedCode;
         try {
-          decodedCode = atob(encodedPart);
+          decodedCode = base64DecodeUnicode(encodedPart);
         } catch(e) {
           decodedCode = "base64 디코딩 중 에러가 발생했습니다: " + e;
         }
