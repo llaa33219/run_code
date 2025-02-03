@@ -16,6 +16,35 @@
       box-sizing: border-box;
       width: 100%;
       height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    #terminal {
+      background: #000;
+      color: lime;
+      padding: 10px;
+      flex: 1;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: Consolas, monospace;
+    }
+    .terminal-input-container {
+      display: flex;
+      align-items: center;
+      background: #000;
+      padding: 5px 10px;
+    }
+    .terminal-input-container span.prompt {
+      margin-right: 4px;
+    }
+    .terminal-input {
+      flex: 1;
+      background: black;
+      color: lime;
+      border: none;
+      outline: none;
+      font-family: Consolas, monospace;
+      font-size: 14px;
     }
     textarea {
       width: 100%;
@@ -33,33 +62,6 @@
       font-size: 16px;
       margin-top: 10px;
       cursor: pointer;
-    }
-    pre {
-      background: #000;
-      color: lime;
-      padding: 10px;
-      border: none;
-      margin: 0;
-      height: 90%;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      font-family: Consolas, monospace;
-    }
-    /* 입력 필드 스타일 (터미널 내) */
-    .terminal-input {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      font-family: Consolas, monospace;
-      font-size: 14px;
-      color: lime;
-      background: black;
-      border: none;
-      outline: none;
-    }
-    .terminal-prompt {
-      margin-right: 4px;
     }
   </style>
 </head>
@@ -167,46 +169,44 @@
     const query = window.location.search;
     
     if(query.startsWith('?=')) {
-        // 터미널 모드
-        document.body.style.background = "#000";
-        container.style.background = "#000";
-        container.style.color = "lime";
-        container.style.padding = "10px";
-        container.style.height = "100vh";
-        container.style.fontFamily = "Consolas, monospace";
-        
-        const outputPre = document.createElement('pre');
-        outputPre.style.height = "90%";
+        // 터미널 모드: 출력 영역과 입력 영역을 별도로 생성
+        container.innerHTML = "";
+        let outputPre = document.createElement('pre');
+        outputPre.id = "terminal-output";
+        outputPre.style.flex = "1";
         container.appendChild(outputPre);
         
-        // 터미널 입력을 위한 __readLine 함수 정의 (비동기)
+        // __readLine 함수: 터미널 출력 아래에 "> " 프롬프트와 입력 필드를 표시
         function __readLine() {
             return new Promise(resolve => {
-                let inputDiv = document.createElement('div');
-                inputDiv.style.display = 'flex';
-                inputDiv.style.flexDirection = 'row';
-                inputDiv.style.alignItems = 'center';
+                let inputContainer = document.createElement('div');
+                inputContainer.className = "terminal-input-container";
                 let promptSpan = document.createElement('span');
+                promptSpan.className = "prompt";
                 promptSpan.textContent = "> ";
-                promptSpan.className = "terminal-prompt";
+                inputContainer.appendChild(promptSpan);
                 let inputField = document.createElement('input');
                 inputField.type = "text";
                 inputField.className = "terminal-input";
-                inputField.style.flex = "1";
-                inputDiv.appendChild(promptSpan);
-                inputDiv.appendChild(inputField);
-                container.appendChild(inputDiv);
+                inputContainer.appendChild(inputField);
+                container.appendChild(inputContainer);
                 inputField.focus();
                 inputField.addEventListener('keydown', function(e) {
                     if (e.key === "Enter") {
                         let val = inputField.value;
-                        // 출력 영역에 입력 내역을 기록
-                        outputPre.textContent += "> " + val + "\n";
-                        container.removeChild(inputDiv);
+                        print("> " + val);
+                        container.removeChild(inputContainer);
                         resolve(val);
                     }
                 });
             });
+        }
+        
+        // print 함수: 출력 영역에 텍스트를 누적
+        function print(x) {
+            outputPre.textContent += x + "\n";
+            // 스크롤 자동 하단 이동
+            outputPre.scrollTop = outputPre.scrollHeight;
         }
         
         const base64Code = query.substring(2);
@@ -214,28 +214,24 @@
         try {
             originalCode = decodeBase64(base64Code);
         } catch(e) {
-            outputPre.textContent = "Base64 디코딩 오류: " + e.message;
+            print("Base64 디코딩 오류: " + e.message);
             return;
         }
         
         let convertedCode = convertCSharpToJS(originalCode);
-        // 필요시 디버그용으로 변환된 코드를 출력할 수 있습니다.
-        // outputPre.textContent = "=== Converted Code ===\n" + convertedCode + "\n\n=== Execution Output ===\n";
-        
-        // 출력 함수 정의 (터미널에 누적)
-        function print(x) {
-            outputPre.textContent += x + "\n";
-        }
+        // 디버그를 원하면 아래 주석을 해제하세요.
+        // print("=== Converted Code ===\n" + convertedCode + "\n=== Execution Output ===\n");
         
         try {
             // 변환된 코드를 async IIFE 내부에서 실행 (비동기 입력 지원)
             new Function("print", "__readLine", "return (async function(){ " + convertedCode + " })()")(print, __readLine)
-              .catch(e => { outputPre.textContent += "\n실행 중 오류: " + e.message; });
+              .catch(e => { print("\n실행 중 오류: " + e.message); });
         } catch(e) {
-            outputPre.textContent += "\n실행 중 오류: " + e.message;
+            print("\n실행 중 오류: " + e.message);
         }
     } else {
-        // 코드 입력 모드
+        // 코드 입력 모드: 코드 입력창과 실행 버튼 제공
+        container.innerHTML = "";
         const textarea = document.createElement('textarea');
         textarea.placeholder = "여기에 C# 코드를 입력하세요.\n\n예시:\n\nusing System;\nusing System.Collections.Generic;\n\nnamespace FibonacciGeneratorApp\n{\n    class Program\n    {\n        static List<long> GenerateFibonacci(long limit)\n        {\n            if (limit < 0)\n            {\n                throw new ArgumentException(\"Limit must be a non-negative integer.\");\n            }\n\n            List<long> sequence = new List<long> { 0 };\n            if (limit >= 1)\n            {\n                sequence.Add(1);\n            }\n            while (true)\n            {\n                int count = sequence.Count;\n                long next = sequence[count - 1] + sequence[count - 2];\n                if (next > limit)\n                {\n                    break;\n                }\n                sequence.Add(next);\n            }\n            return sequence;\n        }\n\n        static void Main(string[] args)\n        {\n            Console.Write(\"Enter a non-negative integer as the limit for Fibonacci sequence: \");\n            Console.Out.Flush();\n\n            string input = Console.ReadLine();\n            if (!long.TryParse(input, out long limit))\n            {\n                Console.Error.WriteLine(\"Error: 유효한 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit < 0)\n            {\n                Console.Error.WriteLine(\"Error: 음이 아닌 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit == 0)\n            {\n                Console.WriteLine(\"Fibonacci sequence (limit 0): 0\");\n                return;\n            }\n\n            try\n            {\n                List<long> fibonacciNumbers = GenerateFibonacci(limit);\n                Console.WriteLine(\"Fibonacci sequence (up to {0}):\", limit);\n                Console.WriteLine(string.Join(\", \", fibonacciNumbers));\n            }\n            catch (Exception ex)\n            {\n                Console.Error.WriteLine(\"오류: \" + ex.Message);\n            }\n        }\n    }\n}\n";
         container.appendChild(textarea);
