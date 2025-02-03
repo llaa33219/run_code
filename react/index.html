@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>React Code Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+      background-color: #f5f5f5;
+    }
+    /* 코드 입력창 및 전체 코드 표시 영역 */
+    #editor, #codeDisplay {
+      width: 100%;
+      height: 100vh;
+      box-sizing: border-box;
+      padding: 20px;
+      font-family: monospace;
+      font-size: 16px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+    /* 실행 버튼 스타일 */
+    #runButton {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script>
+    // Unicode-safe Base64 인코딩 함수
+    function base64EncodeUnicode(str) {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+        function(match, p1) {
+          return String.fromCharCode('0x' + p1);
+        }));
+    }
+
+    // Unicode-safe Base64 디코딩 함수
+    function base64DecodeUnicode(str) {
+      try {
+        return decodeURIComponent(atob(str).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+      } catch(e) {
+        return '디코딩 오류: ' + e;
+      }
+    }
+
+    (function() {
+      var container = document.getElementById('container');
+      var search = window.location.search;
+      // URL의 쿼리스트링이 "?=" 로 시작하고 내용이 있을 경우: base64 인코딩된 코드가 있는 경우
+      if (search.startsWith("?=") && search.length > 2) {
+        var encodedCode = search.substring(2);
+        var code = base64DecodeUnicode(encodedCode);
+        var pre = document.createElement('pre');
+        pre.id = "codeDisplay";
+        pre.textContent = code;
+        container.appendChild(pre);
+      } else {
+        // 쿼리스트링이 없으면 코드 입력창과 실행 버튼 표시
+        var textarea = document.createElement('textarea');
+        textarea.id = "editor";
+        textarea.placeholder = "여기에 React 코드를 입력하세요...";
+        container.appendChild(textarea);
+
+        var button = document.createElement('button');
+        button.id = "runButton";
+        button.textContent = "실행";
+        container.appendChild(button);
+
+        button.addEventListener('click', function() {
+          var code = textarea.value;
+          if (!code.trim()) {
+            alert("코드를 입력해주세요.");
+            return;
+          }
+          var encoded = base64EncodeUnicode(code);
+          // 현재 URL의 origin과 pathname을 사용하여 ?= 인코딩된 코드로 이동
+          window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
