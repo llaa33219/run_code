@@ -76,10 +76,11 @@
     const container = document.getElementById('container');
     const query = window.location.search;
     
-    // 원본 API URL (수정하지 않음): https://rextester.com/rundotnet/api
-    // CORS 이슈 해결을 위해 프록시를 사용 (아래 프록시 링크는 예시입니다)
+    // 원본 API URL (수정하지 않음)
     const API_URL = 'https://rextester.com/rundotnet/api';
-    const PROXY_URL = 'https://thingproxy.freeboard.io/fetch/' + API_URL;
+    // CORS 문제 해결을 위해 cors-anywhere 프록시 사용.
+    // 주의: 이 프록시를 사용하려면 https://cors-anywhere.herokuapp.com/corsdemo 에서 임시 접근 승인을 받아야 합니다.
+    const PROXY_URL = 'https://cors-anywhere.herokuapp.com/' + API_URL;
     
     if(query.startsWith('?=')) {
         // 터미널 모드: 코드 입력 없이 전체화면 터미널 스타일로 실행 결과만 출력
@@ -104,10 +105,13 @@
             return;
         }
         
-        // CORS 문제 해결을 위해 프록시 서버를 통해 rextester API 호출
+        // cors-anywhere 프록시를 통한 rextester API 호출
         fetch(PROXY_URL, {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
+            headers: {
+                "Content-Type": "application/json",
+                "X-Requested-With": "XMLHttpRequest"
+            },
             body: JSON.stringify({
                 LanguageChoice: 1, // C# (Mono)
                 Program: decodedCode,
@@ -133,7 +137,6 @@
         });
     } else {
         // 코드 입력 모드: 코드 입력창과 실행 버튼 제공
-        // 이 모드에서는 실행 후 URL에 base64 인코딩된 코드를 포함하여 재로딩합니다.
         const textarea = document.createElement('textarea');
         textarea.placeholder = '여기에 C# 코드를 입력하세요.';
         container.appendChild(textarea);
