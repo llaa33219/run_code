@@ -2,8 +2,12 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>React Code Viewer</title>
+  <title>React 코드 실행기</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- React, ReactDOM, Babel -->
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     html, body {
       margin: 0;
@@ -12,10 +16,10 @@
       font-family: sans-serif;
       background-color: #f5f5f5;
     }
-    /* 코드 입력창 및 전체 코드 표시 영역 */
-    #editor, #codeDisplay {
+    /* 코드 입력창 */
+    #editor {
       width: 100%;
-      height: 100vh;
+      height: calc(100vh - 50px);
       box-sizing: border-box;
       padding: 20px;
       font-family: monospace;
@@ -23,14 +27,20 @@
       overflow: auto;
       white-space: pre-wrap;
     }
-    /* 실행 버튼 스타일 */
+    /* 실행 버튼 */
     #runButton {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
+      width: 100%;
+      height: 50px;
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      font-size: 18px;
       cursor: pointer;
+    }
+    /* React가 마운트될 컨테이너 */
+    #root {
+      width: 100%;
+      height: 100vh;
     }
   </style>
 </head>
@@ -39,12 +49,11 @@
   <script>
     // Unicode-safe Base64 인코딩 함수
     function base64EncodeUnicode(str) {
-      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-        function(match, p1) {
-          return String.fromCharCode('0x' + p1);
-        }));
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+        return String.fromCharCode('0x' + p1);
+      }));
     }
-
+    
     // Unicode-safe Base64 디코딩 함수
     function base64DecodeUnicode(str) {
       try {
@@ -55,30 +64,35 @@
         return '디코딩 오류: ' + e;
       }
     }
-
+    
     (function() {
       var container = document.getElementById('container');
       var search = window.location.search;
-      // URL의 쿼리스트링이 "?=" 로 시작하고 내용이 있을 경우: base64 인코딩된 코드가 있는 경우
+      // URL에 "?=" 뒤에 base64 인코딩된 코드가 있으면 실행
       if (search.startsWith("?=") && search.length > 2) {
         var encodedCode = search.substring(2);
         var code = base64DecodeUnicode(encodedCode);
-        var pre = document.createElement('pre');
-        pre.id = "codeDisplay";
-        pre.textContent = code;
-        container.appendChild(pre);
+        // React가 마운트될 루트 엘리먼트를 생성 (코드 내에서 ReactDOM.render 등으로 사용)
+        var rootDiv = document.createElement('div');
+        rootDiv.id = "root";
+        container.appendChild(rootDiv);
+        // Babel이 실행할 수 있도록 type="text/babel" 스크립트 태그 생성
+        var script = document.createElement('script');
+        script.type = "text/babel";
+        script.text = code;
+        document.body.appendChild(script);
       } else {
-        // 쿼리스트링이 없으면 코드 입력창과 실행 버튼 표시
+        // URL에 코드가 없는 경우 코드 입력창과 실행 버튼 표시
         var textarea = document.createElement('textarea');
         textarea.id = "editor";
         textarea.placeholder = "여기에 React 코드를 입력하세요...";
         container.appendChild(textarea);
-
+        
         var button = document.createElement('button');
         button.id = "runButton";
         button.textContent = "실행";
         container.appendChild(button);
-
+        
         button.addEventListener('click', function() {
           var code = textarea.value;
           if (!code.trim()) {
@@ -86,7 +100,7 @@
             return;
           }
           var encoded = base64EncodeUnicode(code);
-          // 현재 URL의 origin과 pathname을 사용하여 ?= 인코딩된 코드로 이동
+          // 현재 URL의 origin과 pathname을 사용하여 "?=" + 인코딩된 코드로 이동
           window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
         });
       }
