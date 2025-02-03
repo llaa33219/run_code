@@ -39,7 +39,6 @@
     
     // 글로벌 변수들 (인터랙티브 터미널 시뮬레이션)
     let accumulatedInput = ""; // 사용자가 입력한 모든 STDIN 누적
-    let lastOutput = "";         // 이전 실행에서 받아온 전체 출력
     let isRunning = false;       // API 실행 중 여부
     let commandBuffer = "";      // 현재 입력 중인 명령줄 버퍼
     let runtimeVersion = "";     // Piston API에서 사용할 C 언어 런타임 버전
@@ -48,26 +47,20 @@
     const term = new Terminal();
     term.open(document.getElementById("terminal-container"));
     
-    // 터미널에 텍스트를 출력하는 함수
-    function writeToTerminal(text) {
-      term.write(text);
-    }
-    
     // Piston API에서 C 언어 런타임 버전을 가져오는 함수
     function fetchCRuntimeVersion() {
       return fetch("https://emkc.org/api/v2/piston/runtimes")
         .then(response => response.json())
         .then(data => {
-          // language가 "c"인 항목을 찾습니다.
           const cRuntime = data.find(rt => rt.language === "c");
           if (cRuntime) {
             runtimeVersion = cRuntime.version;
           } else {
-            runtimeVersion = "11.2.0"; // fallback 버전
+            runtimeVersion = "11.2.0";
           }
         })
         .catch(err => {
-          runtimeVersion = "11.2.0"; // 오류 발생 시 fallback
+          runtimeVersion = "11.2.0";
         });
     }
     
@@ -81,7 +74,7 @@
       try {
         code = base64DecodeUnicode(encodedCode);
       } catch (e) {
-        writeToTerminal("\r\n오류: 올바르지 않은 base64 인코딩 문자열입니다.\r\n");
+        term.write("\r\n오류: 올바르지 않은 base64 인코딩 문자열입니다.\r\n");
         isRunning = false;
         return;
       }
@@ -93,12 +86,10 @@
         body: JSON.stringify({
           language: "c",
           version: runtimeVersion,
-          files: [
-            {
-              name: "main.c",
-              content: code
-            }
-          ],
+          files: [{
+            name: "main.c",
+            content: code
+          }],
           stdin: accumulatedInput
         })
       })
@@ -116,19 +107,22 @@
         if (data.run && data.run.output) {
           fullOutput += data.run.output;
         }
-        // 기존 출력(lastOutput) 이후에 추가된 부분만 diff로 계산
-        let diff = "";
-        if (fullOutput.indexOf(lastOutput) === 0) {
-          diff = fullOutput.substring(lastOutput.length);
-        } else {
-          diff = fullOutput;
+        // 만약 누적 입력이 있다면, 기존 프롬프트 줄("Enter a non-negative integer as the limit for Fibonacci sequence: ...")을 제거
+        if (accumulatedInput.trim() !== "") {
+          fullOutput = fullOutput.replace(/^Enter a non-negative integer as the limit for Fibonacci sequence:[^\n]*\r?\n?/, "");
         }
-        lastOutput = fullOutput;
-        writeToTerminal(diff);
+        // 불필요한 공백 및 엔터가 있다면 트리밍
+        fullOutput = fullOutput.replace(/^[\r\n]+/, "");
+        
+        // 터미널을 깔끔하게 갱신 (이전 출력 전체를 지우고 새로 출력)
+        term.clear();
+        term.write(fullOutput);
+        // 새 입력을 위한 프롬프트 출력
+        term.write("\r\n> ");
         isRunning = false;
       })
       .catch(err => {
-        writeToTerminal("\r\n오류 발생: " + err.message + "\r\n");
+        term.write("\r\n오류 발생: " + err.message + "\r\n> ");
         isRunning = false;
       });
     }
@@ -138,15 +132,14 @@
       runInteractive();
     });
     
-    // xterm.js 키 입력 이벤트 처리 (기본적인 터미널 입력/출력 에뮬레이션)
+    // xterm.js 키 입력 이벤트 처리 (터미널 입력/출력 에뮬레이션)
     term.onKey(e => {
       const ev = e.domEvent;
       const key = e.key;
-      if (isRunning) return; // 실행 중에는 입력 무시
+      if (isRunning) return;
       
       if (ev.keyCode === 13) { // Enter 키
-        writeToTerminal("\r\n");
-        // 현재 줄(commandBuffer)을 누적 입력에 추가 (개행 포함)
+        term.write("\r\n");
         accumulatedInput += commandBuffer + "\n";
         commandBuffer = "";
         runInteractive();
@@ -157,7 +150,7 @@
         }
       } else if (!ev.altKey && !ev.ctrlKey && !ev.metaKey) {
         commandBuffer += key;
-        writeToTerminal(key);
+        term.write(key);
       }
     });
   </script>
