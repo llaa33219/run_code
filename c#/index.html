@@ -44,10 +44,6 @@
       word-wrap: break-word;
       font-family: Consolas, "Courier New", monospace;
     }
-    h2 {
-      font-size: 18px;
-      margin-bottom: 5px;
-    }
   </style>
 </head>
 <body>
@@ -78,34 +74,31 @@
     const container = document.getElementById('container');
     const query = window.location.search;
     
-    // URL에 base64 인코딩된 코드가 "?=" 뒤에 붙어있다면 디코딩 후 실행
     if(query.startsWith('?=')) {
+        // 터미널 모드: 전체 화면 터미널 스타일 출력
+        document.body.style.background = "#000";
+        container.style.background = "#000";
+        container.style.color = "lime";
+        container.style.padding = "10px";
+        container.style.height = "100vh";
+        container.style.fontFamily = "Consolas, monospace";
+        
+        // 코드 입력 없이 바로 실행 결과만 보여줌 (실행 결과 전용 터미널 화면)
+        const outputPre = document.createElement('pre');
+        outputPre.style.height = "100%";
+        outputPre.style.margin = "0";
+        outputPre.style.border = "none";
+        outputPre.textContent = "실행 중...";
+        container.appendChild(outputPre);
+        
         const base64Code = query.substring(2);
         let decodedCode;
         try {
             decodedCode = decodeBase64(base64Code);
         } catch(e) {
-            decodedCode = 'Base64 디코딩 오류: ' + e.message;
+            outputPre.textContent = 'Base64 디코딩 오류: ' + e.message;
+            return;
         }
-        
-        // 실행할 코드를 보여줄 영역 생성
-        const codeTitle = document.createElement('h2');
-        codeTitle.textContent = "실행할 C# 코드:";
-        container.appendChild(codeTitle);
-        
-        const codePre = document.createElement('pre');
-        codePre.textContent = decodedCode;
-        container.appendChild(codePre);
-        
-        // 실행 결과를 보여줄 영역 생성
-        const outputTitle = document.createElement('h2');
-        outputTitle.textContent = "실행 결과:";
-        outputTitle.style.marginTop = "20px";
-        container.appendChild(outputTitle);
-        
-        const outputPre = document.createElement('pre');
-        outputPre.textContent = "실행 중...";
-        container.appendChild(outputPre);
         
         // rextester API를 통해 C# 코드 실행 (링크는 원본 그대로 사용)
         fetch("https://rextester.com/rundotnet/api", {
@@ -135,7 +128,7 @@
             outputPre.textContent = "실행 중 오류 발생: " + error;
         });
     } else {
-        // URL에 코드가 없는 경우, 코드 입력창과 실행 버튼 제공
+        // 코드 입력 모드
         const textarea = document.createElement('textarea');
         textarea.placeholder = '여기에 C# 코드를 입력하세요.';
         container.appendChild(textarea);
@@ -147,7 +140,6 @@
         button.addEventListener('click', function() {
             const code = textarea.value;
             const encoded = encodeBase64(code);
-            // 현재 URL의 origin과 pathname을 유지하며 ?= 뒤에 base64 인코딩된 코드를 추가
             window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
         });
     }
