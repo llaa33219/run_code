@@ -100,8 +100,8 @@
         // 3. XML 문서 주석(///) 제거
         code = code.split('\n').filter(line => !/^\s*\/\/\/.*/.test(line)).join('\n');
         
-        // 4. 기본 자료형 선언 치환 (int, double, float, string, bool → var)
-        code = code.replace(/\b(int|double|float|string|bool)\s+/g, "var ");
+        // 4. 기본 자료형 선언 치환 (int, long, double, float, string, bool → var)
+        code = code.replace(/\b(int|long|double|float|string|bool)\s+/g, "var ");
         
         // 5. List<long> 타입 제거
         code = code.replace(/List<\s*long\s*>/g, "");
@@ -110,8 +110,8 @@
         code = code.replace(/\bTrue\b/g, "true");
         code = code.replace(/\bFalse\b/g, "false");
         
-        // 7. 간단한 형 변환 제거: (int), (double), (float), (string), (bool)
-        code = code.replace(/\((int|double|float|string|bool)\)/g, "");
+        // 7. 간단한 형 변환 제거: (int), (long), (double), (float), (string), (bool)
+        code = code.replace(/\((int|long|double|float|string|bool)\)/g, "");
         
         // 8. Console.Out.Flush() 제거
         code = code.replace(/Console\.Out\.Flush\s*\(\s*\)\s*;?/g, "");
