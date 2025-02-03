@@ -77,7 +77,6 @@
       }
       
       // C++ 코드를 실행하는 함수 (Piston API 사용)
-      // 이제 두 번째 인자 inputData를 받아, 프로그램의 stdin으로 전달합니다.
       function runCppCode(code, inputData) {
         var terminal = showTerminal("코드를 실행 중입니다...\n\n");
         fetch("https://emkc.org/api/v2/piston/execute", {
@@ -90,6 +89,7 @@
               name: "main.cpp",
               content: code
             }],
+            // 만약 사용자가 입력값(stdin)을 제공하지 않으면 기본값 "100"이 전달됩니다.
             stdin: inputData || ""
           })
         })
@@ -121,7 +121,7 @@
         });
       }
       
-      // 코드 및 (선택적) 표준 입력(stdin) 값을 입력받는 폼 생성
+      // 코드 및 표준 입력(stdin) 값을 입력받는 폼 생성
       function showInputForm() {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
@@ -132,11 +132,8 @@
           var code = document.getElementById("codeInput").value;
           var stdinValue = document.getElementById("stdinInput").value;
           if (code.trim() === "") return;
-          // 두 값을 하나의 JSON 객체로 묶어 인코딩합니다.
-          var payload = {
-            code: code,
-            stdin: stdinValue
-          };
+          // 사용자가 프로그램 실행 시 제공할 코드와 stdin 값을 JSON 객체로 묶습니다.
+          var payload = { code: code, stdin: stdinValue };
           var encoded;
           try {
             encoded = base64EncodeUnicode(JSON.stringify(payload));
@@ -144,7 +141,7 @@
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
           }
-          // URL에 ?= 뒤에 인코딩된 값을 넣어 페이지를 재로딩합니다.
+          // 인코딩된 값을 URL의 쿼리스트링에 추가하여 페이지를 재로딩합니다.
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
@@ -155,7 +152,8 @@
         
         var stdinTextarea = document.createElement("textarea");
         stdinTextarea.id = "stdinInput";
-        stdinTextarea.placeholder = "프로그램의 입력값 (stdin)을 입력하세요 (선택사항).";
+        // 기본값 "100"을 미리 입력해두어, std::cin >> limit 에서 유효한 숫자가 전달되도록 합니다.
+        stdinTextarea.value = "100";
         form.appendChild(stdinTextarea);
         
         var button = document.createElement("button");
@@ -167,8 +165,7 @@
         contentDiv.appendChild(form);
       }
       
-      // URL 쿼리스트링을 확인하여 ?= 뒤에 오는 base64 인코딩된 값을 디코딩합니다.
-      // 만약 JSON 파싱에 성공하면 { code, stdin } 형식으로 처리하고, 실패하면 코드만 처리합니다.
+      // URL 쿼리스트링 확인: ?= 뒤에 오는 base64 인코딩된 값을 디코딩하여 사용합니다.
       var search = window.location.search;
       if (search && search.indexOf("?=") === 0) {
         var encodedPart = decodeURIComponent(search.substring(2));
