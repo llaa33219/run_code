@@ -77,7 +77,7 @@
         return decodeURIComponent(escape(atob(str)));
     }
     
-    // 고급 C# → JavaScript 변환 함수
+    // 고급 C# → JavaScript 변환 함수 (업데이트됨)
     function convertCSharpToJS(code) {
         // 1. using 문 제거
         code = code.split('\n').filter(line => !/^\s*using\s+/.test(line)).join('\n');
@@ -85,82 +85,74 @@
         // 2. namespace와 class 선언 제거
         code = code.split('\n').filter(line => !/^\s*(namespace|class)\b/.test(line)).join('\n');
         
-        // 3. Main 메서드가 있으면 그 내부만 추출 (아주 단순하게 처리)
-        if(/static\s+void\s+Main\s*\(/.test(code)) {
-            let mainIndex = code.indexOf("static void Main");
-            let braceStart = code.indexOf("{", mainIndex);
-            if(braceStart !== -1) {
-                let count = 1, i = braceStart + 1;
-                for(; i < code.length; i++) {
-                    if(code[i] === '{') count++;
-                    else if(code[i] === '}') count--;
-                    if(count === 0) break;
-                }
-                code = code.substring(braceStart + 1, i);
-            }
-        }
+        // 2.5. 정적 함수 변환: 먼저 Main 함수를 async 함수로 변환 (파라미터의 타입 제거)
+        code = code.replace(/static\s+void\s+Main\s*\((.*?)\)\s*\{/g, function(match, paramsStr) {
+            let newParams = paramsStr.split(",").map(param => {
+                return param.trim().replace(/\S+\s+/, "");
+            }).join(", ");
+            return "async function Main(" + newParams + ") {";
+        });
+        // 그 후, 나머지 static 함수는 타입 없이 함수 이름과 인자만 남기도록 변환
+        code = code.replace(/static\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, funcName, paramsStr) {
+            if (funcName === "Main") return match; // 이미 변환됨
+            let newParams = paramsStr.split(",").map(param => {
+                return param.trim().replace(/\S+\s+/, "");
+            }).join(", ");
+            return "function " + funcName + "(" + newParams + ") {";
+        });
         
-        // 4. XML 문서 주석(///) 제거
+        // 3. XML 문서 주석(///) 제거
         code = code.split('\n').filter(line => !/^\s*\/\/\/.*/.test(line)).join('\n');
         
-        // 5. 기본 자료형 선언 치환 (int, double, float, string, bool → var)
+        // 4. 기본 자료형 선언 치환 (int, double, float, string, bool → var)
         code = code.replace(/\b(int|double|float|string|bool)\s+/g, "var ");
         
-        // 6. List<long> 타입 제거
+        // 5. List<long> 타입 제거
         code = code.replace(/List<\s*long\s*>/g, "");
         
-        // 7. Boolean 리터럴 대소문자 수정 (True/False → true/false)
+        // 6. Boolean 리터럴 대소문자 수정 (True/False → true/false)
         code = code.replace(/\bTrue\b/g, "true");
         code = code.replace(/\bFalse\b/g, "false");
         
-        // 8. 간단한 형 변환 제거: (int), (double), (float), (string), (bool)
+        // 7. 간단한 형 변환 제거: (int), (double), (float), (string), (bool)
         code = code.replace(/\((int|double|float|string|bool)\)/g, "");
         
-        // 9. Console.Out.Flush() 제거
+        // 8. Console.Out.Flush() 제거
         code = code.replace(/Console\.Out\.Flush\s*\(\s*\)\s*;?/g, "");
         
-        // 10. Console.WriteLine, Console.Write, Console.Error.WriteLine → print
+        // 9. Console.WriteLine, Console.Write, Console.Error.WriteLine → print
         code = code.replace(/Console\.WriteLine\s*\(/g, "print(");
         code = code.replace(/Console\.Write\s*\(/g, "print(");
         code = code.replace(/Console\.Error\.WriteLine\s*\(/g, "print(");
         
-        // 11. Console.ReadLine() → await __readLine()
+        // 10. Console.ReadLine() → await __readLine()
         code = code.replace(/Console\.ReadLine\s*\(\s*\)/g, "await __readLine()");
         
-        // 12. new ArgumentException → new Error
+        // 11. new ArgumentException → new Error
         code = code.replace(/new\s+ArgumentException\s*\(/g, "new Error(");
         
-        // 13. new List<long> { ... } → [ ... ]
+        // 12. new List<long> { ... } → [ ... ]
         code = code.replace(/new\s+List<\s*long\s*>\s*\{([^}]+)\}/g, "[$1]");
         
-        // 14. .Add( → .push(
+        // 13. .Add( → .push(
         code = code.replace(/\.Add\s*\(/g, ".push(");
         
-        // 15. .Count → .length
+        // 14. .Count → .length
         code = code.replace(/\.Count\b/g, ".length");
         
-        // 16. string.Join(", ", 변수) → 변수.join(', ')
+        // 15. string.Join(", ", 변수) → 변수.join(', ')
         code = code.replace(/string\.Join\s*\(\s*["']\s*,\s*["']\s*,\s*([^)]+)\)/g, "$1.join(', ')");
         
-        // 17. long.TryParse 구문 변환 (매우 단순하게 처리)
+        // 16. long.TryParse 구문 변환 (매우 단순하게 처리)
         code = code.replace(/if\s*\(\s*!long\.TryParse\s*\(\s*input\s*,\s*out\s+long\s+limit\s*\)\s*\)\s*\{[\s\S]*?\}/, "var limit = parseInt(input);\nif (isNaN(limit)) { print('Error: 유효한 숫자를 입력하세요.'); return; }");
         
-        // 18. public static 및 public 함수(메서드) 정의 변환 → function 함수명(인자) {
-        code = code.replace(/public\s+static\s+\w+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, p1, p2) {
-            let params = p2.split(',').map(param => {
-                return param.trim().replace(/\b(int|double|float|string|bool)\s+/, "");
-            }).join(', ');
-            return "function " + p1 + "(" + params + ") {";
-        });
-        code = code.replace(/public\s+\w+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, p1, p2) {
-            let params = p2.split(',').map(param => {
-                return param.trim().replace(/\b(int|double|float|string|bool)\s+/, "");
-            }).join(', ');
-            return "function " + p1 + "(" + params + ") {";
-        });
-        
-        // 19. catch (Exception ex) → catch (ex)
+        // 17. catch (Exception ex) → catch (ex)
         code = code.replace(/catch\s*\(\s*Exception\s+(\w+)\s*\)/g, "catch ($1)");
+        
+        // 18. Main 자동 호출 (Main 함수가 정의되어 있다면)
+        if (/async function Main\s*\(/.test(code)) {
+            code += "\n;(async function(){ await Main(); })();\n";
+        }
         
         return code;
     }
@@ -169,7 +161,7 @@
     const query = window.location.search;
     
     if(query.startsWith('?=')) {
-        // 터미널 모드: 출력 영역과 입력 영역을 별도로 생성
+        // 터미널 모드: 출력 영역과 입력 영역을 생성
         container.innerHTML = "";
         let outputPre = document.createElement('pre');
         outputPre.id = "terminal-output";
@@ -205,7 +197,6 @@
         // print 함수: 출력 영역에 텍스트를 누적
         function print(x) {
             outputPre.textContent += x + "\n";
-            // 스크롤 자동 하단 이동
             outputPre.scrollTop = outputPre.scrollHeight;
         }
         
@@ -219,18 +210,16 @@
         }
         
         let convertedCode = convertCSharpToJS(originalCode);
-        // 디버그를 원하면 아래 주석을 해제하세요.
-        // print("=== Converted Code ===\n" + convertedCode + "\n=== Execution Output ===\n");
+        // 필요시 디버그: print("=== Converted Code ===\n" + convertedCode + "\n=== Execution Output ===\n");
         
         try {
-            // 변환된 코드를 async IIFE 내부에서 실행 (비동기 입력 지원)
             new Function("print", "__readLine", "return (async function(){ " + convertedCode + " })()")(print, __readLine)
               .catch(e => { print("\n실행 중 오류: " + e.message); });
         } catch(e) {
             print("\n실행 중 오류: " + e.message);
         }
     } else {
-        // 코드 입력 모드: 코드 입력창과 실행 버튼 제공
+        // 코드 입력 모드: textarea와 실행 버튼 제공
         container.innerHTML = "";
         const textarea = document.createElement('textarea');
         textarea.placeholder = "여기에 C# 코드를 입력하세요.\n\n예시:\n\nusing System;\nusing System.Collections.Generic;\n\nnamespace FibonacciGeneratorApp\n{\n    class Program\n    {\n        static List<long> GenerateFibonacci(long limit)\n        {\n            if (limit < 0)\n            {\n                throw new ArgumentException(\"Limit must be a non-negative integer.\");\n            }\n\n            List<long> sequence = new List<long> { 0 };\n            if (limit >= 1)\n            {\n                sequence.Add(1);\n            }\n            while (true)\n            {\n                int count = sequence.Count;\n                long next = sequence[count - 1] + sequence[count - 2];\n                if (next > limit)\n                {\n                    break;\n                }\n                sequence.Add(next);\n            }\n            return sequence;\n        }\n\n        static void Main(string[] args)\n        {\n            Console.Write(\"Enter a non-negative integer as the limit for Fibonacci sequence: \");\n            Console.Out.Flush();\n\n            string input = Console.ReadLine();\n            if (!long.TryParse(input, out long limit))\n            {\n                Console.Error.WriteLine(\"Error: 유효한 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit < 0)\n            {\n                Console.Error.WriteLine(\"Error: 음이 아닌 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit == 0)\n            {\n                Console.WriteLine(\"Fibonacci sequence (limit 0): 0\");\n                return;\n            }\n\n            try\n            {\n                List<long> fibonacciNumbers = GenerateFibonacci(limit);\n                Console.WriteLine(\"Fibonacci sequence (up to {0}):\", limit);\n                Console.WriteLine(string.Join(\", \", fibonacciNumbers));\n            }\n            catch (Exception ex)\n            {\n                Console.Error.WriteLine(\"오류: \" + ex.Message);\n            }\n        }\n    }\n}\n";
