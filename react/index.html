@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>React 코드 실행기</title>
+  <title>React/Node.js 코드 실행기</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- React, ReactDOM, Babel -->
   <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
@@ -53,7 +53,7 @@
         return String.fromCharCode('0x' + p1);
       }));
     }
-    
+
     // Unicode-safe Base64 디코딩 함수
     function base64DecodeUnicode(str) {
       try {
@@ -64,7 +64,7 @@
         return '디코딩 오류: ' + e;
       }
     }
-    
+
     (function() {
       var container = document.getElementById('container');
       var search = window.location.search;
@@ -76,7 +76,19 @@
         var rootDiv = document.createElement('div');
         rootDiv.id = "root";
         container.appendChild(rootDiv);
-        // Babel이 실행할 수 있도록 type="text/babel" 스크립트 태그 생성
+        // Node.js 환경에서 자주 사용되는 전역 변수들을 브라우저 환경에 정의 (대충 작동하도록)
+        var nodeGlobals = document.createElement('script');
+        nodeGlobals.textContent = `
+          if (typeof exports === 'undefined') { window.exports = {}; }
+          if (typeof module === 'undefined') { window.module = { exports: window.exports }; }
+          if (typeof require === 'undefined') { window.require = function(moduleName) {
+            console.warn('require is not implemented in browser environment for module: ' + moduleName);
+            return null;
+          } }
+          if (typeof process === 'undefined') { window.process = { env: {} }; }
+        `;
+        document.body.appendChild(nodeGlobals);
+        // Babel이 실행할 수 있도록 type="text/babel" 스크립트 태그 생성 후 실행
         var script = document.createElement('script');
         script.type = "text/babel";
         script.text = code;
@@ -85,14 +97,14 @@
         // URL에 코드가 없는 경우 코드 입력창과 실행 버튼 표시
         var textarea = document.createElement('textarea');
         textarea.id = "editor";
-        textarea.placeholder = "여기에 React 코드를 입력하세요...";
+        textarea.placeholder = "여기에 React 혹은 Node.js 코드를 입력하세요...";
         container.appendChild(textarea);
-        
+
         var button = document.createElement('button');
         button.id = "runButton";
         button.textContent = "실행";
         container.appendChild(button);
-        
+
         button.addEventListener('click', function() {
           var code = textarea.value;
           if (!code.trim()) {
