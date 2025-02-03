@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>C++ Code Viewer</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: monospace;
+    }
+    /* 코드가 표시될 영역 */
+    #codeDisplay {
+      white-space: pre;
+      overflow: auto;
+      height: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      background: #f5f5f5;
+    }
+    /* 코드 입력 폼 영역 */
+    #inputForm {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    #codeInput {
+      flex: 1;
+      width: 100%;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 10px;
+      resize: none;
+    }
+    #runButton {
+      margin-top: 10px;
+      padding: 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="content"></div>
+  
+  <script>
+    (function() {
+      // base64 디코딩 후 코드를 화면에 표시하는 함수
+      function showCode(decodedCode) {
+        var contentDiv = document.getElementById("content");
+        contentDiv.innerHTML = "";
+        var pre = document.createElement("pre");
+        pre.id = "codeDisplay";
+        pre.textContent = decodedCode;
+        contentDiv.appendChild(pre);
+      }
+      
+      // 코드 입력 폼을 생성하는 함수
+      function showInputForm() {
+        var contentDiv = document.getElementById("content");
+        contentDiv.innerHTML = "";
+        var form = document.createElement("form");
+        form.id = "inputForm";
+        form.onsubmit = function(event) {
+          event.preventDefault();
+          var code = document.getElementById("codeInput").value;
+          if(code.trim() === "") return;
+          var encoded;
+          try {
+            encoded = btoa(code);
+          } catch(e) {
+            alert("인코딩 중 에러가 발생했습니다: " + e);
+            return;
+          }
+          // 현재 URL의 도메인과 경로는 그대로 두고 쿼리스트링에 ?=base64코드를 추가
+          window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
+        };
+        
+        var textarea = document.createElement("textarea");
+        textarea.id = "codeInput";
+        textarea.placeholder = "여기에 C++ 코드를 입력하세요.";
+        form.appendChild(textarea);
+        
+        var button = document.createElement("button");
+        button.id = "runButton";
+        button.type = "submit";
+        button.textContent = "실행";
+        form.appendChild(button);
+        
+        contentDiv.appendChild(form);
+      }
+      
+      // URL의 쿼리스트링을 확인하여 ?= 로 시작하면 base64 디코딩 후 코드 표시, 그렇지 않으면 입력폼 표시
+      var search = window.location.search;
+      if(search && search.indexOf("?=") === 0) {
+        // "?=" 뒤에 오는 base64 인코딩된 문자열 추출 (decodeURIComponent로 원본 그대로 복원)
+        var encodedPart = decodeURIComponent(search.substring(2));
+        var decodedCode;
+        try {
+          decodedCode = atob(encodedPart);
+        } catch(e) {
+          decodedCode = "base64 디코딩 중 에러가 발생했습니다: " + e;
+        }
+        showCode(decodedCode);
+      } else {
+        showInputForm();
+      }
+    })();
+  </script>
+</body>
+</html>
