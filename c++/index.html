@@ -28,6 +28,9 @@
       padding: 10px;
       box-sizing: border-box;
       resize: none;
+      background-color: #1e1e1e;
+      color: #f8f8f2;
+      border: 1px solid #555;
     }
     #executeButton {
       margin-top: 10px;
@@ -38,68 +41,64 @@
       color: white;
       cursor: pointer;
     }
-    /* 터미널 모드 (쿼리스트링에 base64 인코딩된 코드가 있을 경우) */
+    /* 터미널 모드 */
     #terminalContainer {
       display: none;
       height: 100%;
-      box-sizing: border-box;
       padding: 20px;
+      box-sizing: border-box;
       overflow-y: auto;
       white-space: pre-wrap;
     }
-    /* 스타일링: 프롬프트 줄 */
+    /* 프롬프트 줄 스타일 */
     .prompt-line {
-      display: inline;
+      display: flex;
+      align-items: center;
     }
     .prompt-label {
-      display: inline;
       color: #a6e22e;
+      margin-right: 5px;
     }
     .prompt-input {
-      display: inline;
+      flex: 1;
       background: transparent;
       border: none;
       outline: none;
       color: #f8f8f2;
       font-family: Consolas, "Courier New", monospace;
       font-size: 14px;
-      width: 80%;
     }
   </style>
 </head>
 <body>
-  <!-- 편집기 모드: 쿼리스트링에 코드가 없을 경우 -->
+  <!-- 편집기 모드 (쿼리스트링에 코드가 없을 경우) -->
   <div id="editorContainer" style="display: none;">
     <textarea id="codeInput" placeholder="여기에 C++ 코드를 입력하세요..."></textarea>
     <button id="executeButton">실행</button>
   </div>
-  
-  <!-- 터미널 모드: 쿼리스트링에 base64 인코딩된 코드가 있을 경우 -->
+
+  <!-- 터미널 모드 (쿼리스트링에 base64 인코딩된 코드가 있을 경우) -->
   <div id="terminalContainer"></div>
-  
+
   <script>
-    // Unicode 지원 Base64 인코딩/디코딩 함수
+    // Base64 인코딩/디코딩 (Unicode 지원)
     function encodeBase64(str) {
       return btoa(unescape(encodeURIComponent(str)));
     }
     function decodeBase64(str) {
       return decodeURIComponent(escape(atob(str)));
     }
-    
-    // 전역 변수들 (인터랙티브 세션용)
-    var accumulatedInput = "";
-    var currentOutput = "";
+
+    // 전역 변수들
     var code = "";
-    var isExecuting = false;
-    var interactive = false; // 코드에 입력 명령어가 있는지 여부
-    
-    // Wandbox API를 이용하여 C++ 코드를 실행하는 함수
-    // accumulatedInput에 저장된 내용을 stdin으로 전달하여 전체 프로그램 실행 결과를 받아오고,
-    // 이전 출력(currentOutput)과 비교해 새로 출력된 부분만 터미널에 추가함.
+    var accumulatedInput = "";
+    var interactive = false; // 코드에 입력 명령어가 포함되어 있는지 여부
+
+    // wandbox API를 사용하여 C++ 코드를 실행하고, 전체 출력 결과를 받아 업데이트하는 함수
     function executeCode() {
-      if (isExecuting) return;
-      isExecuting = true;
       var terminalContainer = document.getElementById("terminalContainer");
+      // 실행 중이면 잠시 대기 (동시 실행 방지)
+      // wandbox API는 누적 stdin을 기반으로 전체 출력을 반환함
       fetch("https://wandbox.org/api/compile.json", {
         method: "POST",
         headers: {
@@ -134,80 +133,74 @@
         if (!output) {
           output = "실행 결과를 가져올 수 없습니다.";
         }
-        // 만약 이전 출력(currentOutput)이 새 출력의 접두어라면, 새로 추가된 부분만 추출
-        var newPart = "";
-        if (output.indexOf(currentOutput) === 0) {
-          newPart = output.substring(currentOutput.length);
-        } else {
-          // 전체 내용이 달라졌으면 터미널을 새로 채움.
-          newPart = output;
-          currentOutput = "";
-          terminalContainer.textContent = "";
-        }
-        currentOutput = output;
-        terminalContainer.textContent += newPart;
-        terminalContainer.scrollTop = terminalContainer.scrollHeight;
-        isExecuting = false;
-        // 인터랙티브 입력이 필요한 경우 새 프롬프트를 추가
-        if (interactive) {
-          createPrompt();
-        }
+        updateTerminal(output);
       })
       .catch(function(error) {
-        document.getElementById("terminalContainer").textContent = "코드 실행 중 오류 발생: " + error;
-        isExecuting = false;
+        updateTerminal("코드 실행 중 오류 발생: " + error);
       });
     }
-    
-    // 프롬프트 입력 줄 생성 함수: 터미널 마지막에 (입력): 과 inline input 필드를 추가함.
+
+    // 터미널 전체를 업데이트하는 함수: 전체 출력 결과를 라인별로 표시하고, 프롬프트를 추가
+    function updateTerminal(fullOutput) {
+      var terminalContainer = document.getElementById("terminalContainer");
+      // 전체 내용을 <div> 라인 단위로 생성
+      terminalContainer.innerHTML = ""; // 기존 내용 제거
+      var lines = fullOutput.split("\n");
+      lines.forEach(function(line) {
+        var lineDiv = document.createElement("div");
+        lineDiv.textContent = line;
+        terminalContainer.appendChild(lineDiv);
+      });
+      terminalContainer.scrollTop = terminalContainer.scrollHeight;
+      // 인터랙티브 모드라면 프롬프트를 추가
+      if (interactive) {
+        createPrompt();
+      }
+    }
+
+    // 프롬프트 줄 생성: "(입력): " 레이블과 인라인 입력 필드를 추가
     function createPrompt() {
       var terminalContainer = document.getElementById("terminalContainer");
-      // 새 프롬프트 줄 div 생성
       var promptLine = document.createElement("div");
       promptLine.className = "prompt-line";
-      
-      // 프롬프트 라벨
+
       var promptLabel = document.createElement("span");
       promptLabel.className = "prompt-label";
-      promptLabel.textContent = "\n(입력): ";
+      promptLabel.textContent = "(입력):";
       promptLine.appendChild(promptLabel);
-      
-      // 입력 필드
+
       var inputField = document.createElement("input");
       inputField.type = "text";
       inputField.className = "prompt-input";
-      // 자동 포커스
-      setTimeout(function() { inputField.focus(); }, 0);
-      
-      // 엔터 키 이벤트 처리
-      inputField.addEventListener("keypress", function(e) {
+      // 엔터 키 이벤트 처리: 입력 후 엔터를 누르면 처리
+      inputField.addEventListener("keydown", function(e) {
         if (e.key === "Enter") {
+          e.preventDefault();
           processUserInput(inputField.value, promptLine);
         }
       });
-      
       promptLine.appendChild(inputField);
+
       terminalContainer.appendChild(promptLine);
+      inputField.focus();
       terminalContainer.scrollTop = terminalContainer.scrollHeight;
     }
-    
-    // 사용자 입력 처리 함수
+
+    // 사용자 입력 처리: 프롬프트 입력값을 터미널에 에코하고, 누적 입력에 추가 후 코드 실행
     function processUserInput(userInput, promptLine) {
       if (userInput === "") return;
-      var terminalContainer = document.getElementById("terminalContainer");
-      // 에코: 입력 프롬프트 라인의 입력 필드를 제거하고, 입력값을 텍스트로 남김.
+      // 프롬프트 줄에서 입력 필드를 제거하고, 입력한 텍스트를 고정 텍스트로 변경
       promptLine.removeChild(promptLine.lastChild);
       var userText = document.createElement("span");
-      userText.textContent = userInput;
+      userText.textContent = " " + userInput;
       promptLine.appendChild(userText);
-      
-      // 누적 입력에 추가 (각 입력 후 개행 문자 포함)
+
+      // 누적 입력에 추가 (각 입력 후 개행 포함)
       accumulatedInput += userInput + "\n";
-      
-      // 실행 요청
+      // 실행 요청 (프로그램은 누적 stdin에 따라 전체 출력을 다시 반환)
       executeCode();
     }
-    
+
     window.onload = function() {
       var search = window.location.search;
       if (search.indexOf("?=") === 0 && search.length > 2) {
@@ -220,14 +213,10 @@
           code = "// base64 디코딩 오류: " + e;
         }
         document.getElementById("terminalContainer").style.display = "block";
-        // 코드에 입력 관련 명령어가 포함되어 있는지 검사 (std::cin, scanf, gets, fgets 등)
-        interactive = /std::cin|scanf|gets|fgets/i.test(code);
-        // 초기 실행 (입력값 없음)
+        // 코드에 입력 관련 명령어가 포함되어 있는지 검사
+        interactive = /std::cin|cin\s*>>|scanf|gets|fgets/i.test(code);
+        // 초기 실행 (아직 입력값 없음)
         executeCode();
-        // 만약 인터랙티브 모드라면 프롬프트를 생성
-        if (interactive) {
-          createPrompt();
-        }
       } else {
         // 편집기 모드
         document.getElementById("editorContainer").style.display = "flex";
