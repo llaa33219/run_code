@@ -2,23 +2,23 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C++ Code Viewer</title>
+  <title>C++ Code Executor Terminal</title>
   <style>
     html, body {
       height: 100%;
       margin: 0;
       font-family: monospace;
     }
-    /* 코드가 표시될 영역 */
-    #codeDisplay {
-      white-space: pre;
-      overflow: auto;
-      height: 100%;
+    /* 터미널 스타일 */
+    #terminal {
+      background-color: #000;
+      color: #0f0;
       padding: 10px;
-      box-sizing: border-box;
-      background: #f5f5f5;
+      height: 100%;
+      overflow-y: auto;
+      white-space: pre-wrap;
     }
-    /* 코드 입력 폼 영역 */
+    /* 코드 입력 폼 스타일 */
     #inputForm {
       display: flex;
       flex-direction: column;
@@ -60,14 +60,59 @@
         }).join(''));
       }
       
-      // base64 디코딩 후 코드를 화면에 표시하는 함수
-      function showCode(decodedCode) {
+      // 터미널 인터페이스를 생성하는 함수
+      function showTerminal(initialText) {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
-        var pre = document.createElement("pre");
-        pre.id = "codeDisplay";
-        pre.textContent = decodedCode;
-        contentDiv.appendChild(pre);
+        var terminal = document.createElement("div");
+        terminal.id = "terminal";
+        terminal.textContent = initialText || "";
+        contentDiv.appendChild(terminal);
+        return terminal;
+      }
+      
+      // C++ 코드를 실행하는 함수 (Piston API 사용)
+      function runCppCode(code) {
+        var terminal = showTerminal("코드를 실행 중입니다...\n\n");
+        fetch("https://emkc.org/api/v2/piston/execute", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            language: "cpp",
+            version: "17",
+            files: [{
+              name: "main.cpp",
+              content: code
+            }],
+            stdin: ""
+          })
+        })
+        .then(function(response) {
+          if (!response.ok) {
+            throw new Error("API 요청 중 오류가 발생했습니다. 상태 코드: " + response.status);
+          }
+          return response.json();
+        })
+        .then(function(data) {
+          var output = "";
+          if (data.run) {
+            if (data.run.stdout) {
+              output += "출력:\n" + data.run.stdout + "\n";
+            }
+            if (data.run.stderr) {
+              output += "에러:\n" + data.run.stderr + "\n";
+            }
+            output += "종료 코드: " + data.run.exitCode;
+          } else {
+            output = "실행 결과를 가져올 수 없습니다.";
+          }
+          terminal.textContent = output;
+        })
+        .catch(function(error) {
+          terminal.textContent = "코드 실행 중 에러가 발생했습니다: " + error;
+        });
       }
       
       // 코드 입력 폼을 생성하는 함수
@@ -79,15 +124,15 @@
         form.onsubmit = function(event) {
           event.preventDefault();
           var code = document.getElementById("codeInput").value;
-          if(code.trim() === "") return;
+          if (code.trim() === "") return;
           var encoded;
           try {
             encoded = base64EncodeUnicode(code);
-          } catch(e) {
+          } catch (e) {
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
           }
-          // 현재 URL의 도메인과 경로는 그대로 두고 쿼리스트링에 ?=base64코드를 추가
+          // 현재 URL의 도메인과 경로를 그대로 두고 쿼리스트링에 ?=base64코드를 추가
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
@@ -105,18 +150,19 @@
         contentDiv.appendChild(form);
       }
       
-      // URL의 쿼리스트링을 확인하여 ?= 로 시작하면 base64 디코딩 후 코드 표시, 그렇지 않으면 입력폼 표시
+      // URL의 쿼리스트링을 확인하여 ?= 로 시작하면 base64 디코딩 후 코드 실행, 그렇지 않으면 입력폼 표시
       var search = window.location.search;
-      if(search && search.indexOf("?=") === 0) {
+      if (search && search.indexOf("?=") === 0) {
         // "?=" 뒤에 오는 base64 인코딩된 문자열 추출 (decodeURIComponent로 원본 그대로 복원)
         var encodedPart = decodeURIComponent(search.substring(2));
-        var decodedCode;
+        var code;
         try {
-          decodedCode = base64DecodeUnicode(encodedPart);
-        } catch(e) {
-          decodedCode = "base64 디코딩 중 에러가 발생했습니다: " + e;
+          code = base64DecodeUnicode(encodedPart);
+        } catch (e) {
+          showTerminal("base64 디코딩 중 에러가 발생했습니다: " + e);
+          return;
         }
-        showCode(decodedCode);
+        runCppCode(code);
       } else {
         showInputForm();
       }
