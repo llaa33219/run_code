@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C# 코드 실행기 및 인코더</title>
+  <title>C# 코드 실행기 및 인코더 (고급 간이 C# 인터프리터)</title>
   <style>
     html, body {
       margin: 0;
@@ -52,103 +52,133 @@
 <div id="container"></div>
 <script>
 (function() {
-    // Base64 인코딩/디코딩 (UTF-8 지원) 함수들
+    // Base64 인코딩/디코딩 (UTF-8 지원)
     function encodeBase64(str) {
-        const encoder = new TextEncoder();
-        const bytes = encoder.encode(str);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary);
+        return btoa(unescape(encodeURIComponent(str)));
+    }
+    function decodeBase64(str) {
+        return decodeURIComponent(escape(atob(str)));
     }
     
-    function decodeBase64(str) {
-        const binary = atob(str);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
+    // 고급 C# → JavaScript 변환 함수 (간이 인터프리터)
+    function convertCSharpToJS(code) {
+        // 1. using 문 제거
+        code = code.split('\n').filter(line => !/^\s*using\s+/.test(line)).join('\n');
+        
+        // 2. namespace와 class 선언 제거
+        code = code.split('\n').filter(line => !/^\s*(namespace|class)\b/.test(line)).join('\n');
+        
+        // 3. Main 메서드가 있다면 그 내부만 추출 (아주 단순하게 처리)
+        if(/static\s+void\s+Main\s*\(/.test(code)) {
+            let mainIndex = code.indexOf("static void Main");
+            let braceStart = code.indexOf("{", mainIndex);
+            if(braceStart !== -1) {
+                let count = 1, i = braceStart + 1;
+                for(; i < code.length; i++) {
+                    if(code[i] === '{') count++;
+                    else if(code[i] === '}') count--;
+                    if(count === 0) break;
+                }
+                code = code.substring(braceStart + 1, i);
+            }
         }
-        const decoder = new TextDecoder();
-        return decoder.decode(bytes);
+        
+        // 4. 데이터 타입 선언(int, double, float, string, bool)을 var로 치환
+        code = code.replace(/\b(int|double|float|string|bool)\s+/g, "var ");
+        
+        // 5. Boolean 리터럴 대소문자 수정 (C#는 True/False, JS는 true/false)
+        code = code.replace(/\bTrue\b/g, "true");
+        code = code.replace(/\bFalse\b/g, "false");
+        
+        // 6. 간단한 형 변환 제거: (int), (double), (float), (string), (bool)
+        code = code.replace(/\((int|double|float|string|bool)\)/g, "");
+        
+        // 7. Console.WriteLine 및 Console.Write 를 print로 변경
+        code = code.replace(/Console\.WriteLine\s*\(/g, "print(");
+        code = code.replace(/Console\.Write\s*\(/g, "print(");
+        
+        // 8. Console.ReadLine() 를 prompt('Input:') 로 변경
+        code = code.replace(/Console\.ReadLine\s*\(\s*\)/g, "prompt('Input:')");
+        
+        // 9. 함수(메서드) 정의 변환  
+        //    - public static 메서드 변환: 예) public static int Sum(int a, int b) {  => function Sum(a, b) {
+        code = code.replace(/public\s+static\s+\w+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, p1, p2) {
+            let params = p2.split(',').map(param => {
+                return param.trim().replace(/\b(int|double|float|string|bool)\s+/, "");
+            }).join(', ');
+            return "function " + p1 + "(" + params + ") {";
+        });
+        //    - public 인스턴스 메서드 변환: 예) public int Multiply(int a, int b) {  => function Multiply(a, b) {
+        code = code.replace(/public\s+\w+\s+(\w+)\s*\((.*?)\)\s*\{/g, function(match, p1, p2) {
+            let params = p2.split(',').map(param => {
+                return param.trim().replace(/\b(int|double|float|string|bool)\s+/, "");
+            }).join(', ');
+            return "function " + p1 + "(" + params + ") {";
+        });
+        
+        // 10. if, else, for, while, switch 등은 C#와 문법이 유사하므로 그대로 둡니다.
+        // (필요시 추가적인 변환 규칙을 여기서 더 넣을 수 있습니다.)
+        
+        return code;
     }
     
     const container = document.getElementById('container');
     const query = window.location.search;
     
-    // 원본 API URL (수정하지 않음)
-    const API_URL = 'https://rextester.com/rundotnet/api';
-    // CORS 문제 해결을 위해 cors-anywhere 프록시 사용.
-    // 주의: 이 프록시를 사용하려면 https://cors-anywhere.herokuapp.com/corsdemo 에서 임시 접근 승인을 받아야 합니다.
-    const PROXY_URL = 'https://cors-anywhere.herokuapp.com/' + API_URL;
-    
     if(query.startsWith('?=')) {
-        // 터미널 모드: 코드 입력 없이 전체화면 터미널 스타일로 실행 결과만 출력
+        // 터미널 모드: URL에 base64 인코딩된 C# 코드가 있으면 변환 후 실행 결과 출력
         document.body.style.background = "#000";
         container.style.background = "#000";
         container.style.color = "lime";
         container.style.padding = "10px";
         container.style.height = "100vh";
         container.style.fontFamily = "Consolas, monospace";
-        // 실행 결과 전용 터미널 영역 생성
+        
         const outputPre = document.createElement('pre');
         outputPre.style.height = "100%";
-        outputPre.textContent = "실행 중...";
         container.appendChild(outputPre);
         
         const base64Code = query.substring(2);
-        let decodedCode;
+        let originalCode;
         try {
-            decodedCode = decodeBase64(base64Code);
+            originalCode = decodeBase64(base64Code);
         } catch(e) {
-            outputPre.textContent = 'Base64 디코딩 오류: ' + e.message;
+            outputPre.textContent = "Base64 디코딩 오류: " + e.message;
             return;
         }
         
-        // cors-anywhere 프록시를 통한 rextester API 호출
-        fetch(PROXY_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Requested-With": "XMLHttpRequest"
-            },
-            body: JSON.stringify({
-                LanguageChoice: 1, // C# (Mono)
-                Program: decodedCode,
-                Input: ""
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            let result = "";
-            if(data.Errors) {
-                result += "에러:\n" + data.Errors;
-            }
-            if(data.Result) {
-                result += "\n출력:\n" + data.Result;
-            }
-            if(result.trim() === "") {
-                result = "실행 결과가 없습니다.";
-            }
-            outputPre.textContent = result;
-        })
-        .catch(error => {
-            outputPre.textContent = "실행 중 오류 발생: " + error;
-        });
+        // 변환 함수 적용
+        let convertedCode = convertCSharpToJS(originalCode);
+        
+        // 디버그: 변환된 코드를 확인하려면 아래 주석을 해제하세요.
+        // outputPre.textContent = "=== Converted Code ===\n" + convertedCode + "\n\n=== Execution Output ===\n";
+        
+        // print 함수 정의 (출력은 outputPre에 누적)
+        function print(x) {
+            outputPre.textContent += x + "\n";
+        }
+        
+        try {
+            // Function 생성자를 이용해 변환된 코드를 실행합니다.
+            new Function("print", convertedCode)(print);
+        } catch(e) {
+            outputPre.textContent += "\n실행 중 오류: " + e.message;
+        }
     } else {
         // 코드 입력 모드: 코드 입력창과 실행 버튼 제공
         const textarea = document.createElement('textarea');
-        textarea.placeholder = '여기에 C# 코드를 입력하세요.';
+        textarea.placeholder = "여기에 C# 코드를 입력하세요.\n\n예시 1:\nint a = 3;\nint b = 4;\nConsole.WriteLine(a + b);\n\n예시 2:\npublic static int Sum(int a, int b) {\n  return a + b;\n}\nstatic void Main() {\n  Console.WriteLine(Sum(5, 7));\n}\n\n예시 3 (조건문/반복문):\nint i = 0;\nwhile(i < 5) {\n  Console.WriteLine(i);\n  i = i + 1;\n}";
         container.appendChild(textarea);
         
         const button = document.createElement('button');
-        button.textContent = '실행';
+        button.textContent = "실행";
         container.appendChild(button);
         
         button.addEventListener('click', function() {
             const code = textarea.value;
             const encoded = encodeBase64(code);
-            window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
+            // 현재 URL의 origin과 pathname을 유지하며 ?= 뒤에 base64 인코딩된 코드를 추가
+            window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
         });
     }
 })();
