@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C# 코드 실행기 및 인코더 (간이 고급 C# 인터프리터)</title>
+  <title>C# 코드 실행기 및 인코더 (고급 간이 C# 인터프리터)</title>
   <style>
     html, body {
       margin: 0;
@@ -126,8 +126,6 @@
         code = code.replace(/string\.Join\s*\(\s*["']\s*,\s*["']\s*,\s*([^)]+)\)/g, "$1.join(', ')");
         
         // 17. long.TryParse 구문 변환
-        //     원본: if (!long.TryParse(input, out long limit)) { ... }
-        //     변환: var limit = parseInt(input); if (isNaN(limit)) { print('Error: 유효한 숫자를 입력하세요.'); return; }
         code = code.replace(/if\s*\(\s*!long\.TryParse\s*\(\s*input\s*,\s*out\s+long\s+limit\s*\)\s*\)\s*\{[\s\S]*?\}/, "var limit = parseInt(input);\nif (isNaN(limit)) { print('Error: 유효한 숫자를 입력하세요.'); return; }");
         
         // 18. public static 및 public 함수(메서드) 정의 변환 → function 함수명(인자) {
@@ -143,6 +141,9 @@
             }).join(', ');
             return "function " + p1 + "(" + params + ") {";
         });
+        
+        // 19. catch (Exception ex) → catch (ex)
+        code = code.replace(/catch\s*\(\s*Exception\s+(\w+)\s*\)/g, "catch ($1)");
         
         return code;
     }
