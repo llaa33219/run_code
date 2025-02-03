@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Lua 코드 실행기</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    pre {
+      flex: 1;
+      margin: 0;
+      padding: 20px;
+      overflow: auto;
+      background-color: #f5f5f5;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    textarea {
+      flex: 1;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 16px;
+      resize: none;
+    }
+    .button-container {
+      text-align: center;
+      padding: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://unpkg.com/fengari-web/dist/fengari-web.js"></script>
+</head>
+<body>
+  <div id="content"></div>
+  <script>
+    // Unicode-safe base64 인코딩/디코딩 함수
+    function base64EncodeUnicode(str) {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+        return String.fromCharCode('0x' + p1);
+      }));
+    }
+
+    function base64DecodeUnicode(str) {
+      try {
+        return decodeURIComponent(atob(str).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+      } catch (e) {
+        return "디코딩 에러: " + e;
+      }
+    }
+
+    (function(){
+      var contentDiv = document.getElementById('content');
+      var query = window.location.search;
+      
+      // URL이 "?="로 시작하면, base64 인코딩된 Lua 코드를 디코딩하여 실행
+      if(query && query.indexOf("?=") === 0) {
+        var encodedCode = query.substring(2); // "?=" 뒤의 base64 코드 추출
+        var decodedCode = base64DecodeUnicode(encodedCode);
+        
+        // 실행 결과를 출력할 <pre> 요소 생성
+        var output = document.createElement('pre');
+        output.id = "output";
+        contentDiv.appendChild(output);
+        
+        // fengari를 사용해 Lua 상태 생성 및 라이브러리 열기
+        const lua = fengari.lua;
+        const lauxlib = fengari.lauxlib;
+        const lualib = fengari.lualib;
+        const L = lauxlib.luaL_newstate();
+        lualib.luaL_openlibs(L);
+        
+        // Lua의 print 함수를 재정의하여 <pre id="output">에 출력하도록 함
+        lua.lua_pushjsfunction(L, function(L) {
+          var n = lua.lua_gettop(L);
+          var outputText = [];
+          for (var i = 1; i <= n; i++) {
+            outputText.push(lua.lua_tojsstring(L, i));
+          }
+          var line = outputText.join("\t");
+          output.textContent += line + "\n";
+          return 0;
+        });
+        lua.lua_setglobal(L, "print");
+        
+        // 디코딩된 Lua 코드 실행
+        var status = lauxlib.luaL_dostring(L, decodedCode);
+        if (status !== lua.LUA_OK) {
+          var errMsg = lua.lua_tojsstring(L, -1);
+          output.textContent += "\nLua Error: " + errMsg;
+        }
+      } else {
+        // URL에 코드가 없으면 코드 입력창과 실행 버튼을 표시
+        var textarea = document.createElement('textarea');
+        textarea.placeholder = "Lua 코드를 입력하세요...";
+        var buttonContainer = document.createElement('div');
+        buttonContainer.className = 'button-container';
+        var button = document.createElement('button');
+        button.textContent = "실행";
+        button.onclick = function(){
+          var code = textarea.value;
+          var encoded = base64EncodeUnicode(code);
+          // 현재 URL에 "?=" + 인코딩된 코드를 붙여서 이동
+          window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
+        };
+        buttonContainer.appendChild(button);
+        contentDiv.appendChild(textarea);
+        contentDiv.appendChild(buttonContainer);
+      }
+    })();
+  </script>
+</body>
+</html>
