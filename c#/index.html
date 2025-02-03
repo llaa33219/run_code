@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>C# 코드 실행기 및 인코더 (고급 간이 C# 인터프리터)</title>
+  <title>C# 코드 실행기 및 인코더 (고급 간이 C# 인터프리터 + 터미널 입력)</title>
   <style>
     html, body {
       margin: 0;
@@ -40,11 +40,26 @@
       padding: 10px;
       border: none;
       margin: 0;
-      height: 100%;
+      height: 90%;
       overflow: auto;
       white-space: pre-wrap;
       word-wrap: break-word;
       font-family: Consolas, monospace;
+    }
+    /* 입력 필드 스타일 (터미널 내) */
+    .terminal-input {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      color: lime;
+      background: black;
+      border: none;
+      outline: none;
+    }
+    .terminal-prompt {
+      margin-right: 4px;
     }
   </style>
 </head>
@@ -107,8 +122,8 @@
         code = code.replace(/Console\.Write\s*\(/g, "print(");
         code = code.replace(/Console\.Error\.WriteLine\s*\(/g, "print(");
         
-        // 11. Console.ReadLine() → prompt('Input:')
-        code = code.replace(/Console\.ReadLine\s*\(\s*\)/g, "prompt('Input:')");
+        // 11. Console.ReadLine() → await __readLine()
+        code = code.replace(/Console\.ReadLine\s*\(\s*\)/g, "await __readLine()");
         
         // 12. new ArgumentException → new Error
         code = code.replace(/new\s+ArgumentException\s*\(/g, "new Error(");
@@ -125,7 +140,7 @@
         // 16. string.Join(", ", 변수) → 변수.join(', ')
         code = code.replace(/string\.Join\s*\(\s*["']\s*,\s*["']\s*,\s*([^)]+)\)/g, "$1.join(', ')");
         
-        // 17. long.TryParse 구문 변환
+        // 17. long.TryParse 구문 변환 (매우 단순하게 처리)
         code = code.replace(/if\s*\(\s*!long\.TryParse\s*\(\s*input\s*,\s*out\s+long\s+limit\s*\)\s*\)\s*\{[\s\S]*?\}/, "var limit = parseInt(input);\nif (isNaN(limit)) { print('Error: 유효한 숫자를 입력하세요.'); return; }");
         
         // 18. public static 및 public 함수(메서드) 정의 변환 → function 함수명(인자) {
@@ -152,7 +167,7 @@
     const query = window.location.search;
     
     if(query.startsWith('?=')) {
-        // 터미널 모드: URL에 base64 인코딩된 C# 코드가 있으면 변환 후 실행
+        // 터미널 모드
         document.body.style.background = "#000";
         container.style.background = "#000";
         container.style.color = "lime";
@@ -161,8 +176,38 @@
         container.style.fontFamily = "Consolas, monospace";
         
         const outputPre = document.createElement('pre');
-        outputPre.style.height = "100%";
+        outputPre.style.height = "90%";
         container.appendChild(outputPre);
+        
+        // 터미널 입력을 위한 __readLine 함수 정의 (비동기)
+        function __readLine() {
+            return new Promise(resolve => {
+                let inputDiv = document.createElement('div');
+                inputDiv.style.display = 'flex';
+                inputDiv.style.flexDirection = 'row';
+                inputDiv.style.alignItems = 'center';
+                let promptSpan = document.createElement('span');
+                promptSpan.textContent = "> ";
+                promptSpan.className = "terminal-prompt";
+                let inputField = document.createElement('input');
+                inputField.type = "text";
+                inputField.className = "terminal-input";
+                inputField.style.flex = "1";
+                inputDiv.appendChild(promptSpan);
+                inputDiv.appendChild(inputField);
+                container.appendChild(inputDiv);
+                inputField.focus();
+                inputField.addEventListener('keydown', function(e) {
+                    if (e.key === "Enter") {
+                        let val = inputField.value;
+                        // 출력 영역에 입력 내역을 기록
+                        outputPre.textContent += "> " + val + "\n";
+                        container.removeChild(inputDiv);
+                        resolve(val);
+                    }
+                });
+            });
+        }
         
         const base64Code = query.substring(2);
         let originalCode;
@@ -173,25 +218,24 @@
             return;
         }
         
-        // 변환 함수 적용
         let convertedCode = convertCSharpToJS(originalCode);
-        
-        // 디버그가 필요하면 아래 주석을 해제하세요.
+        // 필요시 디버그용으로 변환된 코드를 출력할 수 있습니다.
         // outputPre.textContent = "=== Converted Code ===\n" + convertedCode + "\n\n=== Execution Output ===\n";
         
-        // print 함수 정의 (출력은 outputPre에 누적)
+        // 출력 함수 정의 (터미널에 누적)
         function print(x) {
             outputPre.textContent += x + "\n";
         }
         
         try {
-            // 변환된 코드를 실행합니다.
-            new Function("print", convertedCode)(print);
+            // 변환된 코드를 async IIFE 내부에서 실행 (비동기 입력 지원)
+            new Function("print", "__readLine", "return (async function(){ " + convertedCode + " })()")(print, __readLine)
+              .catch(e => { outputPre.textContent += "\n실행 중 오류: " + e.message; });
         } catch(e) {
             outputPre.textContent += "\n실행 중 오류: " + e.message;
         }
     } else {
-        // 코드 입력 모드: 코드 입력창과 실행 버튼 제공
+        // 코드 입력 모드
         const textarea = document.createElement('textarea');
         textarea.placeholder = "여기에 C# 코드를 입력하세요.\n\n예시:\n\nusing System;\nusing System.Collections.Generic;\n\nnamespace FibonacciGeneratorApp\n{\n    class Program\n    {\n        static List<long> GenerateFibonacci(long limit)\n        {\n            if (limit < 0)\n            {\n                throw new ArgumentException(\"Limit must be a non-negative integer.\");\n            }\n\n            List<long> sequence = new List<long> { 0 };\n            if (limit >= 1)\n            {\n                sequence.Add(1);\n            }\n            while (true)\n            {\n                int count = sequence.Count;\n                long next = sequence[count - 1] + sequence[count - 2];\n                if (next > limit)\n                {\n                    break;\n                }\n                sequence.Add(next);\n            }\n            return sequence;\n        }\n\n        static void Main(string[] args)\n        {\n            Console.Write(\"Enter a non-negative integer as the limit for Fibonacci sequence: \");\n            Console.Out.Flush();\n\n            string input = Console.ReadLine();\n            if (!long.TryParse(input, out long limit))\n            {\n                Console.Error.WriteLine(\"Error: 유효한 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit < 0)\n            {\n                Console.Error.WriteLine(\"Error: 음이 아닌 숫자를 입력하세요.\");\n                return;\n            }\n\n            if (limit == 0)\n            {\n                Console.WriteLine(\"Fibonacci sequence (limit 0): 0\");\n                return;\n            }\n\n            try\n            {\n                List<long> fibonacciNumbers = GenerateFibonacci(limit);\n                Console.WriteLine(\"Fibonacci sequence (up to {0}):\", limit);\n                Console.WriteLine(string.Join(\", \", fibonacciNumbers));\n            }\n            catch (Exception ex)\n            {\n                Console.Error.WriteLine(\"오류: \" + ex.Message);\n            }\n        }\n    }\n}\n";
         container.appendChild(textarea);
@@ -203,7 +247,6 @@
         button.addEventListener('click', function() {
             const code = textarea.value;
             const encoded = encodeBase64(code);
-            // 현재 URL의 origin과 pathname을 유지하며 ?= 뒤에 base64 인코딩된 코드를 추가
             window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
         });
     }
