@@ -47,6 +47,7 @@
       overflow-y: auto;
       white-space: pre-wrap;
     }
+    /* 사용자 입력 영역 (인터랙티브 프로그램용) */
     #inputArea {
       display: none;
       position: fixed;
@@ -56,7 +57,7 @@
       background-color: #333;
       padding: 10px;
       box-sizing: border-box;
-      display: flex;
+      align-items: center;
     }
     #terminalInput {
       flex: 1;
@@ -87,6 +88,7 @@
   
   <!-- 터미널 모드: 쿼리스트링에 base64 인코딩된 코드가 있을 때만 보임 -->
   <div id="terminalContainer"></div>
+  <!-- 인터랙티브 입력 영역 (코드에 std::cin, scanf 등 입력 관련 명령어가 있을 경우 표시) -->
   <div id="inputArea">
     <input id="terminalInput" type="text" placeholder="입력..." />
     <button id="sendButton">전송</button>
@@ -108,12 +110,14 @@
     var isExecuting = false;
     
     // Wandbox API를 이용하여 C++ 코드를 실행하는 함수
-    // accumulatedInput 변수에 저장된 내용을 stdin으로 전달하여 전체 프로그램 실행 결과를 받아오고,
-    // 이전 실행 결과와 비교하여 새롭게 출력된 부분만 터미널에 추가함 (인터랙티브 효과 시뮬레이션)
+    // 현재까지 누적된 입력(accumulatedInput)을 stdin으로 전달하여 전체 프로그램의 실행 결과를 가져오고,
+    // 이전 실행 결과(currentOutput)와 비교하여 새로 출력된 부분만 터미널에 추가함.
     function executeCode() {
       if (isExecuting) return;
       isExecuting = true;
       var terminalContainer = document.getElementById("terminalContainer");
+      // 실행 중 메시지 추가 (필요 시 덮어쓰기 가능)
+      // terminalContainer.textContent += "\n[실행 중...]\n";
       fetch("https://wandbox.org/api/compile.json", {
         method: "POST",
         headers: {
@@ -148,13 +152,12 @@
         if (!output) {
           output = "실행 결과를 가져올 수 없습니다.";
         }
-        // 이전 실행 결과(currentOutput)가 새로운 전체 출력의 접두어라면,
-        // 그 이후의 새로 출력된 부분만 추출하여 터미널에 추가
+        // 만약 이전 출력(currentOutput)이 새 출력의 접두어라면, 새로 추가된 부분만 추출
         var newPart = "";
         if (output.indexOf(currentOutput) === 0) {
           newPart = output.substring(currentOutput.length);
         } else {
-          // 만약 일치하지 않으면 전체 내용을 다시 표시
+          // 일치하지 않으면 전체를 다시 표시 (프로그램 전체가 다시 실행된 경우)
           newPart = output;
           currentOutput = "";
           terminalContainer.textContent = "";
@@ -182,17 +185,24 @@
           code = "// base64 디코딩 오류: " + e;
         }
         document.getElementById("terminalContainer").style.display = "block";
-        document.getElementById("inputArea").style.display = "flex";
-        // 초기 실행 (아직 입력값 없음)
+        // 코드에 입력 관련 명령어가 포함되어 있는지 검사 (std::cin, scanf, gets, fgets 등)
+        var interactive = /std::cin|scanf|gets|fgets/i.test(code);
+        if (interactive) {
+          document.getElementById("inputArea").style.display = "flex";
+        } else {
+          document.getElementById("inputArea").style.display = "none";
+        }
+        // 초기 실행 (아직 입력값은 없음)
         executeCode();
         
-        // 사용자 입력 처리 (전송 버튼 클릭)
+        // 사용자 입력 처리: 전송 버튼 클릭
         document.getElementById("sendButton").addEventListener("click", function() {
           var userInput = document.getElementById("terminalInput").value;
           if (userInput === "") return;
-          // 터미널에 사용자가 입력한 내용을 에코
           var terminalContainer = document.getElementById("terminalContainer");
+          // 에코: 사용자가 입력한 내용을 터미널에 출력 (새 줄 추가)
           terminalContainer.textContent += "\n" + userInput + "\n";
+          // 누적 입력에 추가 (각 입력 후 개행 문자 포함)
           accumulatedInput += userInput + "\n";
           document.getElementById("terminalInput").value = "";
           executeCode();
