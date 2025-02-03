@@ -26,16 +26,17 @@
       padding: 10px;
       box-sizing: border-box;
     }
-    #codeInput, #stdinInput {
+    textarea {
       width: 100%;
       font-family: monospace;
       font-size: 14px;
       padding: 10px;
-      resize: none;
+      resize: vertical;
       margin-bottom: 10px;
     }
+    /* 코드 입력창과 표준 입력창 높이 비율 조정 */
     #codeInput {
-      height: 50%;
+      height: 40%;
     }
     #stdinInput {
       height: 20%;
@@ -65,7 +66,7 @@
         }).join(''));
       }
       
-      // 터미널 인터페이스 생성
+      // 터미널 인터페이스 생성 함수
       function showTerminal(initialText) {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
@@ -77,15 +78,14 @@
       }
       
       // C++ 코드를 실행하는 함수 (Piston API 사용)
-      function runCppCode(code, inputData) {
-        // 만약 inputData가 존재하면 마지막에 newline을 추가하여 std::cin이 정상적으로 인식하게 합니다.
-        if (inputData && !inputData.endsWith("\n")) {
-          inputData += "\n";
-        }
+      // 두번째 매개변수 stdin은 프로그램이 실행될 때 전달할 표준 입력값입니다.
+      function runCppCode(code, stdin) {
         var terminal = showTerminal("코드를 실행 중입니다...\n\n");
         fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({
             language: "cpp",
             version: "10.2.0",
@@ -93,7 +93,7 @@
               name: "main.cpp",
               content: code
             }],
-            stdin: inputData || ""
+            stdin: stdin || ""
           })
         })
         .then(function(response) {
@@ -124,7 +124,8 @@
         });
       }
       
-      // 코드 및 표준 입력(stdin) 값을 입력받는 폼 생성
+      // 코드 입력 폼 생성 함수
+      // 여기서는 C++ 코드와 프로그램 실행 시 사용할 표준 입력값을 입력할 수 있는 두 개의 입력창을 제공합니다.
       function showInputForm() {
         var contentDiv = document.getElementById("content");
         contentDiv.innerHTML = "";
@@ -133,9 +134,10 @@
         form.onsubmit = function(event) {
           event.preventDefault();
           var code = document.getElementById("codeInput").value;
-          var stdinValue = document.getElementById("stdinInput").value;
+          var stdin = document.getElementById("stdinInput").value;
           if (code.trim() === "") return;
-          var payload = { code: code, stdin: stdinValue };
+          // code와 stdin을 하나의 JSON 객체로 묶어 base64 인코딩
+          var payload = { code: code, stdin: stdin };
           var encoded;
           try {
             encoded = base64EncodeUnicode(JSON.stringify(payload));
@@ -143,6 +145,7 @@
             alert("인코딩 중 에러가 발생했습니다: " + e);
             return;
           }
+          // 현재 URL의 도메인과 경로는 그대로 두고, 쿼리스트링에 ?= 인코딩된 JSON 문자열을 추가합니다.
           window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
         };
         
@@ -153,9 +156,7 @@
         
         var stdinTextarea = document.createElement("textarea");
         stdinTextarea.id = "stdinInput";
-        stdinTextarea.placeholder = "프로그램의 입력값 (stdin)을 입력하세요.";
-        // 기본 입력값을 "100\n"으로 설정 (마지막에 newline 포함)
-        stdinTextarea.value = "100\n";
+        stdinTextarea.placeholder = "프로그램 입력값 (옵션)";
         form.appendChild(stdinTextarea);
         
         var button = document.createElement("button");
@@ -165,9 +166,12 @@
         form.appendChild(button);
         
         contentDiv.appendChild(form);
+        // 코드 입력창에 자동 포커스를 줍니다.
+        codeTextarea.focus();
       }
       
-      // URL 쿼리스트링 확인: ?= 뒤의 base64 인코딩된 값을 디코딩하여 사용합니다.
+      // 페이지 초기화: URL의 쿼리스트링이 "?="로 시작하면 base64 디코딩 후 실행,
+      // 그렇지 않으면 코드/입력값을 입력할 폼을 표시합니다.
       var search = window.location.search;
       if (search && search.indexOf("?=") === 0) {
         var encodedPart = decodeURIComponent(search.substring(2));
@@ -179,19 +183,17 @@
           return;
         }
         var code = "";
-        var inputData = "";
+        var stdin = "";
         try {
-          var obj = JSON.parse(decoded);
-          if (obj && typeof obj === "object" && "code" in obj) {
-            code = obj.code;
-            inputData = obj.stdin || "";
-          } else {
-            code = decoded;
-          }
-        } catch (err) {
+          var payload = JSON.parse(decoded);
+          code = payload.code;
+          stdin = payload.stdin;
+        } catch(e) {
+          // JSON 파싱 실패 시, 전체 디코딩된 텍스트를 코드로 처리합니다.
           code = decoded;
+          stdin = "";
         }
-        runCppCode(code, inputData);
+        runCppCode(code, stdin);
       } else {
         showInputForm();
       }
