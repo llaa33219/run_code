@@ -39,10 +39,10 @@
     
     // 글로벌 변수들
     let accumulatedInput = ""; // 사용자가 입력한 모든 STDIN 누적
-    let shownOutput = "";        // 터미널에 누적해서 보여진 전체 출력
-    let isRunning = false;       // API 실행 중 여부
-    let commandBuffer = "";      // 현재 입력 중인 명령줄 버퍼
-    let runtimeVersion = "";     // Piston API에서 사용할 C 언어 런타임 버전
+    let shownOutput = "";      // 터미널에 누적해서 보여진 전체 출력
+    let isRunning = false;     // API 실행 중 여부
+    let commandBuffer = "";    // 현재 입력 중인 명령줄 버퍼
+    let runtimeVersion = "";   // Piston API에서 사용할 C 언어 런타임 버전
     
     // xterm.js 터미널 인스턴스 생성
     const term = new Terminal();
@@ -69,8 +69,8 @@
     function runInteractive() {
       isRunning = true;
       
-      // URL의 ?= 뒤에 있는 base64 인코딩된 C 코드를 디코딩
-      const encodedCode = window.location.search.substring(2);
+      // URL의 #= 뒤에 있는 base64 인코딩된 C 코드를 디코딩
+      const encodedCode = window.location.hash.substring(2);
       let code = "";
       try {
         code = base64DecodeUnicode(encodedCode);
