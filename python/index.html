@@ -104,8 +104,8 @@ sys.stdout = sys.stderr = JSWriter()
           }
         } catch(e) {
           let errorMsg = e.toString();
-          if(errorMsg.includes("No module named 'flask'")) {
-            errorMsg += "\\nFlask 모듈은 Pyodide 환경에서 지원되지 않습니다. Flask 관련 코드는 실행할 수 없습니다.";
+          if(errorMsg.includes("No module named")) {
+            errorMsg += "\\nPyodide에서 지원되지 라이브러리입니다.";
           }
           writeOutput("\\nError: " + errorMsg);
         }
