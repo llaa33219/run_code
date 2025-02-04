@@ -228,16 +228,27 @@ if "cryptography" not in sys.modules:
 
     // tkinter 포함 각종 tkinter 하위 모듈(파일대화상자, 메시지박스, simpledialog, colorchooser, ttk)도
     // 사용자가 import하면 "대충" 동작하도록 만들어줍니다.
+    // 기존 코드에서 object()로 반환하던 부분에, title(), geometry() 등을 흉내 낸 DummyTk 클래스를 정의해
+    // AttributeError('object' has no attribute 'title') 문제를 해결합니다.
     const dummyTkinter = `
 import sys, types
 
+class DummyTk:
+    def __init__(self, *args, **kwargs):
+        print("Dummy tkinter.Tk created. (실제 GUI는 사용할 수 없습니다.)")
+    def title(self, text):
+        print(f"Dummy tkinter.Tk.title({text}) called.")
+    def geometry(self, geo):
+        print(f"Dummy tkinter.Tk.geometry({geo}) called.")
+    def configure(self, **kwargs):
+        print(f"Dummy tkinter.Tk.configure(...) called with: {kwargs}")
+    def mainloop(self):
+        print("Dummy tkinter.mainloop called.")
+
 if "tkinter" not in sys.modules:
     tkinter = types.ModuleType("tkinter")
-    def dummy_Tk(*args, **kwargs):
-        print("Dummy tkinter.Tk created. (실제 GUI는 사용할 수 없습니다.)")
-        return object()
-    tkinter.Tk = dummy_Tk
-    tkinter.mainloop = lambda: print("Dummy tkinter.mainloop called.")
+    tkinter.Tk = DummyTk
+    tkinter.mainloop = lambda: print("Dummy tkinter.mainloop called. (직접 Tk.mainloop()를 쓰세요.)")
     sys.modules["tkinter"] = tkinter
 else:
     tkinter = sys.modules["tkinter"]
