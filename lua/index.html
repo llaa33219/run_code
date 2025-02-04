@@ -104,11 +104,15 @@
             errMsg = lua.lua_tojsstring(L, -1);
             lua.lua_pop(L, 1);
           } else {
-            lua.lua_getglobal(L, "tostring");      // push tostring function
-            lua.lua_pushvalue(L, -2);              // push error object
-            lua.lua_call(L, 1, 1);                 // call tostring(error)
-            errMsg = lua.lua_isstring(L, -1) ? lua.lua_tojsstring(L, -1) : "Unknown error";
-            lua.lua_pop(L, 2); // pop both the result and the original error object
+            lua.lua_getglobal(L, "tostring");      // tostring 함수 푸시
+            lua.lua_pushvalue(L, -2);              // 에러 객체 푸시
+            lua.lua_call(L, 1, 1);                 // tostring(error) 호출
+            errMsg = lua.lua_tojsstring(L, -1);
+            lua.lua_pop(L, 2); // 결과와 원래의 에러 객체 모두 팝
+          }
+          // 에러 메시지가 "nil" 또는 빈 값인 경우 더 명확한 메시지로 대체
+          if (errMsg === "nil" || !errMsg) {
+            errMsg = "알 수 없는 에러가 발생했습니다.";
           }
           output.textContent += "\nLua Error: " + errMsg;
         }
