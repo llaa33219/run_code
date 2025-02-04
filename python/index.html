@@ -64,12 +64,12 @@
     async function main() {
       let pyodide = await loadPyodide();
       
-      // Setup dummy modules for unsupported libraries (tkinter, tkinter.filedialog, Flask, etc.)
+      // Setup dummy modules for unsupported libraries (tkinter, its submodules, Flask, etc.)
       await pyodide.runPythonAsync(`
 import sys
 import types
 
-# Dummy tkinter module
+# --- Dummy implementation for tkinter and its submodules ---
 if "tkinter" not in sys.modules:
     tkinter = types.ModuleType("tkinter")
     def dummy_Tk(*args, **kwargs):
@@ -81,7 +81,7 @@ if "tkinter" not in sys.modules:
 else:
     tkinter = sys.modules["tkinter"]
 
-# Dummy tkinter.filedialog submodule
+# Dummy for tkinter.filedialog
 if "tkinter.filedialog" not in sys.modules:
     filedialog = types.ModuleType("tkinter.filedialog")
     def dummy_askopenfilename(*args, **kwargs):
@@ -92,10 +92,26 @@ if "tkinter.filedialog" not in sys.modules:
         return ""
     filedialog.askopenfilename = dummy_askopenfilename
     filedialog.asksaveasfilename = dummy_asksaveasfilename
-    tkinter.filedialog = filedialog
     sys.modules["tkinter.filedialog"] = filedialog
+    tkinter.filedialog = filedialog
 
-# Dummy flask module
+# Dummy for tkinter.messagebox
+if "tkinter.messagebox" not in sys.modules:
+    messagebox = types.ModuleType("tkinter.messagebox")
+    def dummy_showinfo(title, message):
+        print("Dummy tkinter.messagebox.showinfo called. Title:", title, "Message:", message)
+    def dummy_showerror(title, message):
+        print("Dummy tkinter.messagebox.showerror called. Title:", title, "Message:", message)
+    def dummy_askyesno(title, message):
+        print("Dummy tkinter.messagebox.askyesno called. Title:", title, "Message:", message)
+        return False
+    messagebox.showinfo = dummy_showinfo
+    messagebox.showerror = dummy_showerror
+    messagebox.askyesno = dummy_askyesno
+    sys.modules["tkinter.messagebox"] = messagebox
+    tkinter.messagebox = messagebox
+
+# --- Dummy implementation for Flask ---
 if "flask" not in sys.modules:
     flask = types.ModuleType("flask")
     class DummyFlask:
@@ -108,7 +124,7 @@ if "flask" not in sys.modules:
       `);
       
       var query = window.location.search;
-      if(query.startsWith("?=") && query.length > 2) {
+      if (query.startsWith("?=") && query.length > 2) {
         var encoded = query.substring(2);
         var code;
         try {
