@@ -61,10 +61,10 @@
       }
       
       var container = document.getElementById('container');
-      var search = window.location.search;
-      // URL이 "?=" 로 시작하면 base64로 인코딩된 자바스크립트 코드가 전달된 것으로 간주
-      if (search.startsWith('?=')) {
-        var encodedCode = search.substring(2);
+      var hash = window.location.hash;
+      // URL이 "#=" 로 시작하면 base64로 인코딩된 자바스크립트 코드가 전달된 것으로 간주
+      if (hash.startsWith('#=')) {
+        var encodedCode = hash.substring(2);
         var decodedCode;
         try {
           decodedCode = base64DecodeUnicode(encodedCode);
@@ -103,8 +103,8 @@
             alert('코드 인코딩 중 오류가 발생했습니다: ' + e);
             return;
           }
-          // 현재 URL의 origin과 pathname을 유지하고 쿼리스트링에 base64 인코딩된 코드를 추가하여 이동
-          window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
+          // 현재 URL의 origin과 pathname을 유지하고 hash에 base64 인코딩된 코드를 추가하여 이동
+          window.location.href = window.location.origin + window.location.pathname + '#=' + encoded;
         });
       }
     })();
