@@ -37,89 +37,59 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   /**
-   * 이 버전은 "?=" 방식 대신 URL의 해시(#=)를 사용하여
-   * 매우 긴 데이터도 서버로 전송되지 않고 클라이언트에서만 처리되도록 합니다.
-   * 또한, 압축된 문자열이 너무 길 경우 localStorage에 저장하고 짧은 ID로 접근합니다.
+   * "?=" / 로컬 스토리지 없이,
+   * 해시("#=") + LZString 압축만 사용하여 마크다운을 표시/편집하도록 한다.
    */
   
-  // URL에서 인코딩된 데이터를 가져오는 함수 (hash 전용)
+  // 해시 "#=" 부분에서 데이터 추출
   function getEncodedData() {
-    // hash (fragment) 검사: "#=" 혹은 "#id="
-    if (window.location.hash) {
-      if (window.location.hash.startsWith("#=")) {
-        return { mode: "viewer", data: window.location.hash.slice(2) };
-      } else if (window.location.hash.startsWith("#id=")) {
-        return { mode: "viewer-id", data: window.location.hash.slice(4) };
-      }
+    if (window.location.hash && window.location.hash.startsWith("#=")) {
+      return window.location.hash.slice(2);
     }
     return null;
   }
   
-  var encodedInfo = getEncodedData();
-  
-  if (encodedInfo) {
+  var encodedData = getEncodedData();
+
+  if (encodedData) {
+    // 뷰어 모드: 해시로부터 가져온 압축 데이터 해제
     var markdownContent = "";
-    if (encodedInfo.mode === "viewer-id") {
-      // localStorage에서 데이터 로드 (저장된 ID 사용)
-      var storedEncoded = localStorage.getItem("sharedCode_" + encodedInfo.data);
-      if (!storedEncoded) {
-        document.body.innerHTML = "저장된 코드가 없습니다. (localStorage에서 찾을 수 없음)";
-        console.error("localStorage에 저장된 코드가 없습니다. id:", encodedInfo.data);
-        return;
-      }
-      markdownContent = LZString.decompressFromEncodedURIComponent(storedEncoded);
-      if (markdownContent === null) {
-        markdownContent = "데이터 압축 해제에 실패했습니다.";
-        console.error("LZString 압축 해제 실패 (viewer-id)");
-      }
-    } else if (encodedInfo.mode === "viewer") {
-      // hash에서 가져온 인코딩 데이터 처리
-      var decodedEncoded;
-      try {
-        decodedEncoded = decodeURIComponent(encodedInfo.data);
-      } catch(e) {
-        console.error("decodeURIComponent 실패:", e);
-        decodedEncoded = encodedInfo.data;
-      }
-      markdownContent = LZString.decompressFromEncodedURIComponent(decodedEncoded);
-      if (markdownContent === null) {
-        markdownContent = "데이터 압축 해제에 실패했습니다.";
-        console.error("LZString 압축 해제 실패 (viewer)");
-      }
-      // 만약 인코딩된 문자열이 너무 길다면 localStorage에 저장하고 URL을 짧게 업데이트
-      if (encodedInfo.data.length > 2000) {
-        var id = 'code_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem("sharedCode_" + id, encodedInfo.data);
-        // 페이지 새로고침 없이 URL의 hash만 교체
-        history.replaceState(null, "", window.location.origin + window.location.pathname + "#id=" + id);
-      }
+    var decodedEncoded;
+    try {
+      decodedEncoded = decodeURIComponent(encodedData);
+    } catch(e) {
+      console.error("decodeURIComponent 실패:", e);
+      decodedEncoded = encodedData;
     }
-    // 마크다운 렌더링: Showdown 사용
+
+    markdownContent = LZString.decompressFromEncodedURIComponent(decodedEncoded);
+    if (markdownContent === null) {
+      markdownContent = "데이터 압축 해제에 실패했습니다.";
+      console.error("LZString 압축 해제 실패");
+    }
+
+    // 마크다운 렌더링
     var converter = new showdown.Converter();
     var htmlContent = converter.makeHtml(markdownContent);
     document.body.innerHTML = '<div class="markdown-body">' + htmlContent + '</div>';
+
   } else {
-    // 에디터 모드: URL에 인코딩된 데이터가 없으면 코드 입력창 표시
+    // 에디터 모드
     document.body.innerHTML = `
       <div style="display: flex; flex-direction: column; height: 100vh; margin:0;">
         <textarea id="codeInput" placeholder="마크다운 코드를 입력하세요..."></textarea>
         <button id="runButton">실행</button>
       </div>
     `;
+    
     document.getElementById("runButton").addEventListener("click", function() {
       var code = document.getElementById("codeInput").value;
       try {
-        // LZString을 사용하여 압축 및 URL 안전 인코딩
+        // LZString 압축 후 URL-safe 인코딩
         var encoded = LZString.compressToEncodedURIComponent(code);
-        // 문자열 길이가 너무 길면 localStorage에 저장 후 ID로 URL 업데이트
-        if (encoded.length > 2000) {
-          var id = 'code_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-          localStorage.setItem("sharedCode_" + id, encoded);
-          window.location.hash = "id=" + id;
-        } else {
-          window.location.hash = "=" + encoded;
-        }
-        // 뷰어 모드를 바로 실행하도록 페이지 새로고침
+        // 해시 "#=" 형태로 저장
+        window.location.hash = "=" + encoded;
+        // 뷰어 모드로 새로고침
         location.reload();
       } catch(e) {
         alert("코드 인코딩 중 오류가 발생했습니다.");
