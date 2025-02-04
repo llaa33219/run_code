@@ -37,12 +37,12 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   /**
-   * 이 버전은 기존 query string (?=) 대신 URL의 fragment(해시)를 사용하여
+   * 이 버전은 "?=" 방식 대신 URL의 해시(#=)를 사용하여
    * 매우 긴 데이터도 서버로 전송되지 않고 클라이언트에서만 처리되도록 합니다.
    * 또한, 압축된 문자열이 너무 길 경우 localStorage에 저장하고 짧은 ID로 접근합니다.
    */
   
-  // URL에서 인코딩된 데이터를 가져오는 함수 (hash 우선, 없으면 query string)
+  // URL에서 인코딩된 데이터를 가져오는 함수 (hash 전용)
   function getEncodedData() {
     // hash (fragment) 검사: "#=" 혹은 "#id="
     if (window.location.hash) {
@@ -50,14 +50,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return { mode: "viewer", data: window.location.hash.slice(2) };
       } else if (window.location.hash.startsWith("#id=")) {
         return { mode: "viewer-id", data: window.location.hash.slice(4) };
-      }
-    }
-    // 하위 호환: query string 검사 ("?=" 또는 "?id=")
-    if (window.location.search) {
-      if (window.location.search.startsWith("?=")) {
-        return { mode: "viewer", data: window.location.search.slice(2) };
-      } else if (window.location.search.startsWith("?id=")) {
-        return { mode: "viewer-id", data: window.location.search.slice(4) };
       }
     }
     return null;
@@ -81,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error("LZString 압축 해제 실패 (viewer-id)");
       }
     } else if (encodedInfo.mode === "viewer") {
-      // query string 혹은 hash에서 가져온 인코딩 데이터 처리
+      // hash에서 가져온 인코딩 데이터 처리
       var decodedEncoded;
       try {
         decodedEncoded = decodeURIComponent(encodedInfo.data);
@@ -98,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (encodedInfo.data.length > 2000) {
         var id = 'code_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         localStorage.setItem("sharedCode_" + id, encodedInfo.data);
-        // 페이지 새로고침 없이 URL의 hash만 교체 (query string과 hash 둘 다 업데이트)
+        // 페이지 새로고침 없이 URL의 hash만 교체
         history.replaceState(null, "", window.location.origin + window.location.pathname + "#id=" + id);
       }
     }
