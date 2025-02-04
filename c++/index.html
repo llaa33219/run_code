@@ -171,7 +171,6 @@
 
       var promptLabel = document.createElement("span");
       promptLabel.className = "prompt-label";
-      // "입력:" 대신 ">" 프롬프트로 표시
       promptLabel.textContent = "> ";
       promptLine.appendChild(promptLabel);
 
@@ -194,22 +193,21 @@
     // 사용자 입력 처리: 프롬프트의 입력값을 에코하고 누적 입력에 추가 후 재실행 요청
     function processUserInput(userInput, promptLine) {
       if (userInput === "") return;
-      // 프롬프트 줄에서 입력 필드를 제거하고, 입력한 텍스트를 고정 텍스트로 대체
       promptLine.removeChild(promptLine.lastChild);
       var userText = document.createElement("span");
       userText.textContent = userInput;
       promptLine.appendChild(userText);
 
-      // 누적 입력에 추가 (개행 포함)
       accumulatedInput += userInput + "\n";
       executeCode();
     }
 
     window.onload = function() {
-      var search = window.location.search;
-      if (search.indexOf("?=") === 0 && search.length > 2) {
+      // ?= 대신 #= 사용
+      var hash = window.location.hash;
+      if (hash.indexOf("#=") === 0 && hash.length > 2) {
         // 터미널 모드
-        var encodedPart = search.substring(2);
+        var encodedPart = hash.substring(2);
         encodedPart = decodeURIComponent(encodedPart);
         try {
           code = decodeBase64(encodedPart);
@@ -217,7 +215,6 @@
           code = "// base64 디코딩 오류: " + e;
         }
         document.getElementById("terminalContainer").style.display = "block";
-        // 인터랙티브 입력 관련 명령어가 있는지 검사 (std::cin, cin >>, scanf, gets, fgets 등)
         interactive = /std::cin|cin\s*>>|scanf|gets|fgets/i.test(code);
         executeCode();
       } else {
@@ -226,7 +223,7 @@
         document.getElementById("executeButton").addEventListener("click", function() {
           var codeInput = document.getElementById("codeInput").value;
           var encoded = encodeBase64(codeInput);
-          window.location.href = window.location.origin + window.location.pathname + "?=" + encodeURIComponent(encoded);
+          window.location.href = window.location.origin + window.location.pathname + "#=" + encodeURIComponent(encoded);
         });
       }
     };
