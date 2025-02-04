@@ -105,7 +105,7 @@ sys.stdout = sys.stderr = JSWriter()
         } catch(e) {
           let errorMsg = e.toString();
           if(errorMsg.includes("No module named")) {
-            errorMsg += "\\nPyodide에서 지원되지 라이브러리입니다.";
+            errorMsg += "\\nPyodide에서 지원되지 않는 라이브러리입니다.";
           }
           writeOutput("\\nError: " + errorMsg);
         }
