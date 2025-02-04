@@ -64,12 +64,14 @@
     async function main() {
       let pyodide = await loadPyodide();
       
-      // Setup dummy modules for unsupported libraries (tkinter, its submodules, Flask, etc.)
+      // Setup dummy modules for unsupported libraries.
+      // 여기서는 tkinter 및 그 하위 모듈(파일 대화상자, 메시지박스, 단순 대화상자, 색상 선택기, ttk)과 Flask 등을 모조리 포함합니다.
       await pyodide.runPythonAsync(`
 import sys
 import types
 
-# --- Dummy implementation for tkinter and its submodules ---
+# --- Dummy implementation for tkinter and all its submodules ---
+
 if "tkinter" not in sys.modules:
     tkinter = types.ModuleType("tkinter")
     def dummy_Tk(*args, **kwargs):
@@ -85,13 +87,17 @@ else:
 if "tkinter.filedialog" not in sys.modules:
     filedialog = types.ModuleType("tkinter.filedialog")
     def dummy_askopenfilename(*args, **kwargs):
-        print("Dummy tkinter.filedialog.askopenfilename called. (실제 tkinter.filedialog는 Pyodide에서 지원되지 않습니다.)")
+        print("Dummy tkinter.filedialog.askopenfilename called. (실제 tkinter.filedialog는 지원되지 않습니다.)")
         return ""
     def dummy_asksaveasfilename(*args, **kwargs):
-        print("Dummy tkinter.filedialog.asksaveasfilename called. (실제 tkinter.filedialog는 Pyodide에서 지원되지 않습니다.)")
+        print("Dummy tkinter.filedialog.asksaveasfilename called. (실제 tkinter.filedialog는 지원되지 않습니다.)")
+        return ""
+    def dummy_askdirectory(*args, **kwargs):
+        print("Dummy tkinter.filedialog.askdirectory called. (실제 tkinter.filedialog는 지원되지 않습니다.)")
         return ""
     filedialog.askopenfilename = dummy_askopenfilename
     filedialog.asksaveasfilename = dummy_asksaveasfilename
+    filedialog.askdirectory = dummy_askdirectory
     sys.modules["tkinter.filedialog"] = filedialog
     tkinter.filedialog = filedialog
 
@@ -105,20 +111,69 @@ if "tkinter.messagebox" not in sys.modules:
     def dummy_askyesno(title, message):
         print("Dummy tkinter.messagebox.askyesno called. Title:", title, "Message:", message)
         return False
+    def dummy_askokcancel(title, message):
+        print("Dummy tkinter.messagebox.askokcancel called. Title:", title, "Message:", message)
+        return False
     messagebox.showinfo = dummy_showinfo
     messagebox.showerror = dummy_showerror
     messagebox.askyesno = dummy_askyesno
+    messagebox.askokcancel = dummy_askokcancel
     sys.modules["tkinter.messagebox"] = messagebox
     tkinter.messagebox = messagebox
+
+# Dummy for tkinter.simpledialog
+if "tkinter.simpledialog" not in sys.modules:
+    simpledialog = types.ModuleType("tkinter.simpledialog")
+    def dummy_askstring(title, prompt, **kwargs):
+        print("Dummy tkinter.simpledialog.askstring called. Title:", title, "Prompt:", prompt)
+        return ""
+    def dummy_askinteger(title, prompt, **kwargs):
+        print("Dummy tkinter.simpledialog.askinteger called. Title:", title, "Prompt:", prompt)
+        return None
+    def dummy_askfloat(title, prompt, **kwargs):
+        print("Dummy tkinter.simpledialog.askfloat called. Title:", title, "Prompt:", prompt)
+        return None
+    simpledialog.askstring = dummy_askstring
+    simpledialog.askinteger = dummy_askinteger
+    simpledialog.askfloat = dummy_askfloat
+    sys.modules["tkinter.simpledialog"] = simpledialog
+    tkinter.simpledialog = simpledialog
+
+# Dummy for tkinter.colorchooser
+if "tkinter.colorchooser" not in sys.modules:
+    colorchooser = types.ModuleType("tkinter.colorchooser")
+    def dummy_askcolor(*args, **kwargs):
+        print("Dummy tkinter.colorchooser.askcolor called. (실제 tkinter.colorchooser는 지원되지 않습니다.)")
+        return ((0, 0, 0), "#000000")
+    colorchooser.askcolor = dummy_askcolor
+    sys.modules["tkinter.colorchooser"] = colorchooser
+    tkinter.colorchooser = colorchooser
+
+# Dummy for tkinter.ttk
+if "tkinter.ttk" not in sys.modules:
+    ttk = types.ModuleType("tkinter.ttk")
+    class DummyWidget:
+        def __init__(self, *args, **kwargs):
+            print("Dummy ttk widget created. (실제 tkinter.ttk는 지원되지 않습니다.)")
+        def pack(self, *args, **kwargs):
+            pass
+        def grid(self, *args, **kwargs):
+            pass
+    ttk.Widget = DummyWidget
+    ttk.Button = DummyWidget
+    ttk.Label = DummyWidget
+    ttk.Entry = DummyWidget
+    sys.modules["tkinter.ttk"] = ttk
+    tkinter.ttk = ttk
 
 # --- Dummy implementation for Flask ---
 if "flask" not in sys.modules:
     flask = types.ModuleType("flask")
     class DummyFlask:
         def __init__(self, *args, **kwargs):
-            print("Dummy Flask initialized. (실제 Flask는 Pyodide에서 지원되지 않습니다.)")
+            print("Dummy Flask initialized. (실제 Flask는 지원되지 않습니다.)")
         def run(self, *args, **kwargs):
-            print("Dummy Flask run. (실제 Flask는 Pyodide에서 지원되지 않습니다.)")
+            print("Dummy Flask run. (실제 Flask는 지원되지 않습니다.)")
     flask.Flask = DummyFlask
     sys.modules["flask"] = flask
       `);
@@ -157,7 +212,7 @@ sys.stdout = sys.stderr = JSWriter()
         try {
           // 입력된 Python 코드를 실행
           let result = await pyodide.runPythonAsync(code);
-          if(result !== undefined && result !== null) {
+          if (result !== undefined && result !== null) {
             writeOutput("\\n" + result.toString());
           }
         } catch(e) {
