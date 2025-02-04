@@ -43,31 +43,159 @@
       font-size: 1em;
       cursor: pointer;
     }
+    /* Tkinter 대체용 컨테이너들이 들어갈 공간 */
+    .tk-root {
+      border: 2px dashed #888;
+      padding: 10px;
+      margin: 10px 0;
+      width: fit-content;
+      background-color: #fff;
+    }
+    .tk-btn {
+      margin: 4px;
+      padding: 6px 12px;
+    }
   </style>
-  <!-- 원본 pyodide 스크립트 링크 -->
+  <!-- Pyodide 스크립트 (원본 링크) -->
   <script src="https://cdn.jsdelivr.net/pyodide/v0.23.3/full/pyodide.js"></script>
 </head>
 <body>
   <div id="container"></div>
+  
   <script>
-    // Helper functions to encode/decode Unicode to/from Base64
-    function b64EncodeUnicode(str) {
-      return btoa(
-        encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
-          return String.fromCharCode(parseInt(p1, 16));
-        })
-      );
-    }
-    function b64DecodeUnicode(str) {
-      return decodeURIComponent(
-        atob(str).split('').map(function(c) {
-          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join('')
-      );
+    /************************************************************
+     * 1) 자바스크립트 측 "브라우저 GUI" 대체 함수들
+     *   - python code에서 js 함수를 호출하기 위해 pyodide.globals에 등록할 예정
+     ************************************************************/
+    
+    // 루트 창( tk = tkinter.Tk() ) 하나가 만들어질 때마다
+    // <div class="tk-root" id="tk_root_xxx"> 이런 식으로 HTML을 추가.
+    let tkRootCount = 0;
+
+    function createTkRoot() {
+      tkRootCount += 1;
+      let rootId = "tk_root_" + tkRootCount;
+      let container = document.getElementById("container");
+      let rootDiv = document.createElement("div");
+      rootDiv.className = "tk-root";
+      rootDiv.id = rootId;
+      rootDiv.textContent = "(대체) Tkinter Root Window - " + rootId;
+      container.appendChild(rootDiv);
+      return rootId;
     }
 
-    // micropip로 설치 가능한 패키지 매핑 (Pure Python)
-    // import 이름 : PyPI 패키지명
+    // 루트창의 title() -> 그냥 rootDiv의 첫 번째 라인 텍스트를 갱신하거나 document.title 등을 갱신해도 됨
+    function setTkTitle(rootId, titleText) {
+      let el = document.getElementById(rootId);
+      if (el) {
+        el.textContent = "(대체) " + titleText + " - " + rootId;
+      }
+    }
+
+    // geometry() -> 여기선 간단히 무시 (원하면 el.style.width/height 적용 가능)
+    function setTkGeometry(rootId, geo) {
+      // 예: "300x150" 이런걸 파싱해서 style 지정할 수도 있음
+      console.log(`(대체) geometry(${geo}) 호출됨 - 실제 반영은 생략`);
+    }
+
+    // Button 등 위젯 생성 -> rootDiv 내부에 <button> 등 추가
+    // text, command 등 파라미터를 반영해서 onclick이벤트 달기
+    let widgetCount = 0;
+    function createTkWidget(rootId, widgetType, kwargsJson) {
+      let el = document.getElementById(rootId);
+      if (!el) {
+        console.warn("유효하지 않은 루트 ID:", rootId);
+        return;
+      }
+      let w = document.createElement("button"); // 일단 button만 예시
+      widgetCount += 1;
+      w.id = "tk_widget_" + widgetCount;
+      w.className = "tk-btn";
+
+      // kwargsJson은 파이썬쪽에서 {"text":"클릭","command":"py_function_name"} 등으로 넘겨줄 것
+      let kwargs = JSON.parse(kwargsJson);
+
+      let text = kwargs.text || (widgetType + " " + widgetCount);
+      w.innerText = text;
+
+      // command가 있다면, 버튼 클릭 시 python 함수를 호출
+      if (kwargs.command) {
+        w.addEventListener("click", () => {
+          // pyodide.runPython() (동기) 또는 runPythonAsync() (비동기)
+          // 여기서는 즉시 실행
+          window.pyodide.runPythonAsync(`${kwargs.command}()`).catch(err=>{
+            console.error("Error in command:", err);
+          });
+        });
+      }
+
+      el.appendChild(w);
+      return w.id;
+    }
+
+    // layout 메서드(pack, grid 등) -> 여기서는 그냥 무시 (브라우저 flow로 자동 배치)
+    function layoutWidget(widgetId, layoutType, kwargsJson) {
+      console.log(`(대체) ${layoutType}(${widgetId}, ${kwargsJson}) 호출됨 - 실제 레이아웃은 무시`);
+    }
+
+    // messagebox.showinfo -> JS alert
+    function msgbox_showinfo(title, message) {
+      alert(`[showinfo] ${title}\n\n${message}`);
+    }
+    // messagebox.showerror -> JS alert (에러 표시)
+    function msgbox_showerror(title, message) {
+      alert(`[showerror] ${title}\n\n${message}`);
+    }
+    // messagebox.askyesno -> confirm
+    function msgbox_askyesno(title, message) {
+      return confirm(`[askyesno] ${title}\n\n${message}`);
+    }
+    // messagebox.askokcancel -> confirm
+    function msgbox_askokcancel(title, message) {
+      return confirm(`[askokcancel] ${title}\n\n${message}`);
+    }
+
+    // simpledialog.askstring -> prompt
+    function dialog_askstring(title, prompt, defaultVal="") {
+      let result = prompt(`[askstring] ${title}\n\n${prompt}`, defaultVal);
+      return result===null ? "" : result;  // null이면 빈 문자열
+    }
+    // simpledialog.askinteger -> prompt 후 int 변환 시도
+    function dialog_askinteger(title, prompt, defaultVal="0") {
+      let result = prompt(`[askinteger] ${title}\n\n${prompt}`, defaultVal);
+      if (result===null) return null;
+      let parsed = parseInt(result, 10);
+      if (isNaN(parsed)) return null;
+      return parsed;
+    }
+    // simpledialog.askfloat -> prompt 후 float 변환 시도
+    function dialog_askfloat(title, prompt, defaultVal="0.0") {
+      let result = prompt(`[askfloat] ${title}\n\n${prompt}`, defaultVal);
+      if (result===null) return null;
+      let parsed = parseFloat(result);
+      if (isNaN(parsed)) return null;
+      return parsed;
+    }
+
+    // filedialog.askopenfilename -> <input type="file">을 임시로 띄워서 사용자에게 파일 선택하도록
+    //   여기서는 간단히 JS prompt로 파일명만 받아온다고 가정
+    function filedialog_askopenfilename() {
+      let path = prompt("[askopenfilename] 파일 경로를 직접 입력하세요:", "");
+      return path || "";
+    }
+    function filedialog_asksaveasfilename() {
+      let path = prompt("[asksaveasfilename] 저장할 파일 경로 입력:", "");
+      return path || "";
+    }
+    function filedialog_askdirectory() {
+      let path = prompt("[askdirectory] 디렉토리 경로 입력:", "");
+      return path || "";
+    }
+
+    /************************************************************
+     * 2) Pyodide 초기화 및 “import” 감지 → micropip 설치 + Dummy 처리
+     ************************************************************/
+    // micropip로 설치 가능한 패키지 (import명 -> PyPI패키지명)
     const micropipInstallable = {
       "bs4": "beautifulsoup4",
       "beautifulsoup4": "beautifulsoup4",
@@ -78,316 +206,109 @@
       "pytest": "pytest"
     };
 
-    // Pyodide에서 완벽히 동작할 수는 없지만,
-    // "대충"이라도 사용 가능한 더미 모듈을 만들어줄 대상
-    // (key: 모듈이름, value: 파이썬 코드 문자열)
-    // 여기서 더미 모듈 생성 후 -> 아래서 공통 "__getattr__" 방식으로 확장
+    // 미지원 라이브러리는 “Dummy” 모듈
     const dummyModules = {
       "tensorflow": `
 import types, sys
-
 if "tensorflow" not in sys.modules:
     tf_dummy = types.ModuleType("tensorflow")
-    def dummy_constant(value):
-        print("Dummy tf.constant called with value:", value)
-        return value
-    tf_dummy.constant = dummy_constant
-
-    # keras 서브모듈도 가짜로 달아줄 수 있음
-    keras_mod = types.ModuleType("tensorflow.keras")
-    def dummy_sequential(*args, **kwargs):
-        print("Dummy keras.Sequential called.")
-    keras_mod.Sequential = dummy_sequential
-    tf_dummy.keras = keras_mod
-
     sys.modules["tensorflow"] = tf_dummy
 `,
       "torch": `
 import types, sys
-
 if "torch" not in sys.modules:
     torch_dummy = types.ModuleType("torch")
-    def dummy_tensor(value):
-        print("Dummy torch.tensor called with value:", value)
-        return value
-    torch_dummy.tensor = dummy_tensor
     sys.modules["torch"] = torch_dummy
 `,
       "cv2": `
 import types, sys
-
 if "cv2" not in sys.modules:
     cv2_dummy = types.ModuleType("cv2")
-    def dummy_imread(path):
-        print("Dummy cv2.imread called. Path:", path)
-        return None
-    cv2_dummy.imread = dummy_imread
     sys.modules["cv2"] = cv2_dummy
 `,
       "keras": `
 import types, sys
-
 if "keras" not in sys.modules:
     keras_dummy = types.ModuleType("keras")
-    def dummy_model(*args, **kwargs):
-        print("Dummy keras model function called.")
-    keras_dummy.Model = dummy_model
     sys.modules["keras"] = keras_dummy
 `,
       "flask": `
 import types, sys
-
 if "flask" not in sys.modules:
     flask = types.ModuleType("flask")
-    class DummyFlask:
-        def __init__(self, *args, **kwargs):
-            print("Dummy Flask initialized.")
-        def run(self, *args, **kwargs):
-            print("Dummy Flask run.")
-    flask.Flask = DummyFlask
     sys.modules["flask"] = flask
 `,
       "django": `
 import types, sys
-
 if "django" not in sys.modules:
     django_mod = types.ModuleType("django")
-    print("Dummy django module created.")
     sys.modules["django"] = django_mod
 `,
       "fastapi": `
 import types, sys
-
 if "fastapi" not in sys.modules:
     fa_mod = types.ModuleType("fastapi")
-    class DummyFastAPI:
-        def __init__(self, *args, **kwargs):
-            print("Dummy FastAPI initialized.")
-        def get(self, path):
-            print("Dummy FastAPI get on", path)
-    fa_mod.FastAPI = DummyFastAPI
     sys.modules["fastapi"] = fa_mod
 `,
       "selenium": `
 import types, sys
-
 if "selenium" not in sys.modules:
     sel = types.ModuleType("selenium")
-    print("Dummy selenium module created.")
     sys.modules["selenium"] = sel
 `,
       "pygame": `
 import types, sys
-
 if "pygame" not in sys.modules:
     pg = types.ModuleType("pygame")
-    def dummy_init():
-        print("Dummy pygame.init called.")
-    pg.init = dummy_init
     sys.modules["pygame"] = pg
 `,
       "wx": `
 import types, sys
-
 if "wx" not in sys.modules:
     wx_mod = types.ModuleType("wx")
-    print("Dummy wxPython module created.")
     sys.modules["wx"] = wx_mod
 `,
       "PyQt5": `
 import types, sys
-
 if "PyQt5" not in sys.modules:
     pyqt = types.ModuleType("PyQt5")
-    print("Dummy PyQt5 module created.")
     sys.modules["PyQt5"] = pyqt
 `,
       "sqlalchemy": `
 import types, sys
-
 if "sqlalchemy" not in sys.modules:
     sa = types.ModuleType("sqlalchemy")
-    print("Dummy sqlalchemy module created.")
     sys.modules["sqlalchemy"] = sa
 `,
       "paramiko": `
 import types, sys
-
 if "paramiko" not in sys.modules:
     pm = types.ModuleType("paramiko")
-    print("Dummy paramiko module created.")
     sys.modules["paramiko"] = pm
 `,
       "twisted": `
 import types, sys
-
 if "twisted" not in sys.modules:
     tw = types.ModuleType("twisted")
-    print("Dummy twisted module created.")
     sys.modules["twisted"] = tw
 `,
       "PyInstaller": `
 import types, sys
-
 if "PyInstaller" not in sys.modules:
     pi = types.ModuleType("PyInstaller")
-    print("Dummy PyInstaller module created.")
     sys.modules["PyInstaller"] = pi
 `,
       "cryptography": `
 import types, sys
-
 if "cryptography" not in sys.modules:
     cr = types.ModuleType("cryptography")
-    print("Dummy cryptography module created.")
     sys.modules["cryptography"] = cr
 `
     };
 
-    // tkinter 포함 각종 tkinter 하위 모듈(파일대화상자, 메시지박스, simpledialog, colorchooser, ttk)도
-    // 사용자가 import하면 "대충" 동작하도록 만들어줍니다.
-    // 이제 tkinter.Button, tkinter.Label 등도 전부 DummyWidget 처리 + __getattr__로 뭘 해도 에러 안 나게 함.
-    const dummyTkinter = `
-import sys, types
-
-class _AttrSafe:
-    """
-    모든 속성 접근을 안전하게 처리하는 헬퍼 클래스.
-    """
-    def __init__(self, name="_AttrSafe"):
-        self.__dict__["_dummy_name"] = name
-
-    def __getattr__(self, item):
-        def dummy_method(*args, **kwargs):
-            print(f"[{self._dummy_name}.{item}] called with args={args}, kwargs={kwargs}")
-            return self  # 체인 형식으로 계속 반환
-        return dummy_method
-
-    def __setattr__(self, key, value):
-        print(f"[{self._dummy_name}] setattr {key}={value}")
-
-class DummyTk(_AttrSafe):
-    def __init__(self, *args, **kwargs):
-        super().__init__(name="tkinter.Tk")
-        print("Dummy tkinter.Tk created. (실제 GUI는 사용할 수 없습니다.)")
-
-class DummyWidget(_AttrSafe):
-    def __init__(self, widget_name="tkinter.Widget", *args, **kwargs):
-        super().__init__(name=widget_name)
-        print(f"Dummy {widget_name} created.")
-
-if "tkinter" not in sys.modules:
-    tkinter = types.ModuleType("tkinter")
-
-    # Tk
-    tkinter.Tk = DummyTk
-    tkinter.mainloop = lambda: print("Dummy tkinter.mainloop called.")
-
-    # 대표적인 위젯들(사용자가 tkinter.Button(...) 식으로 호출할 때)
-    tkinter.Button = lambda *a, **kw: DummyWidget("tkinter.Button", *a, **kw)
-    tkinter.Label = lambda *a, **kw: DummyWidget("tkinter.Label", *a, **kw)
-    tkinter.Frame = lambda *a, **kw: DummyWidget("tkinter.Frame", *a, **kw)
-    tkinter.Entry = lambda *a, **kw: DummyWidget("tkinter.Entry", *a, **kw)
-    tkinter.LabelFrame = lambda *a, **kw: DummyWidget("tkinter.LabelFrame", *a, **kw)
-    tkinter.Checkbutton = lambda *a, **kw: DummyWidget("tkinter.Checkbutton", *a, **kw)
-    tkinter.Radiobutton = lambda *a, **kw: DummyWidget("tkinter.Radiobutton", *a, **kw)
-    tkinter.Scale = lambda *a, **kw: DummyWidget("tkinter.Scale", *a, **kw)
-
-    # 하위 모듈들
-    if "tkinter.filedialog" not in sys.modules:
-        filedialog = types.ModuleType("tkinter.filedialog")
-        def dummy_askopenfilename(*args, **kwargs):
-            print("Dummy askopenfilename called.")
-            return ""
-        def dummy_asksaveasfilename(*args, **kwargs):
-            print("Dummy asksaveasfilename called.")
-            return ""
-        def dummy_askdirectory(*args, **kwargs):
-            print("Dummy askdirectory called.")
-            return ""
-        filedialog.askopenfilename = dummy_askopenfilename
-        filedialog.asksaveasfilename = dummy_asksaveasfilename
-        filedialog.askdirectory = dummy_askdirectory
-        sys.modules["tkinter.filedialog"] = filedialog
-        tkinter.filedialog = filedialog
-
-    if "tkinter.messagebox" not in sys.modules:
-        messagebox = types.ModuleType("tkinter.messagebox")
-        def dummy_showinfo(title, message):
-            print("[messagebox.showinfo]", title, message)
-        def dummy_showerror(title, message):
-            print("[messagebox.showerror]", title, message)
-        def dummy_askyesno(title, message):
-            print("[messagebox.askyesno]", title, message)
-            return False
-        def dummy_askokcancel(title, message):
-            print("[messagebox.askokcancel]", title, message)
-            return False
-        messagebox.showinfo = dummy_showinfo
-        messagebox.showerror = dummy_showerror
-        messagebox.askyesno = dummy_askyesno
-        messagebox.askokcancel = dummy_askokcancel
-        sys.modules["tkinter.messagebox"] = messagebox
-        tkinter.messagebox = messagebox
-
-    if "tkinter.simpledialog" not in sys.modules:
-        simpledialog = types.ModuleType("tkinter.simpledialog")
-        def dummy_askstring(title, prompt, **kwargs):
-            print("[simpledialog.askstring]", title, prompt)
-            return ""
-        def dummy_askinteger(title, prompt, **kwargs):
-            print("[simpledialog.askinteger]", title, prompt)
-            return None
-        def dummy_askfloat(title, prompt, **kwargs):
-            print("[simpledialog.askfloat]", title, prompt)
-            return None
-        simpledialog.askstring = dummy_askstring
-        simpledialog.askinteger = dummy_askinteger
-        simpledialog.askfloat = dummy_askfloat
-        sys.modules["tkinter.simpledialog"] = simpledialog
-        tkinter.simpledialog = simpledialog
-
-    if "tkinter.colorchooser" not in sys.modules:
-        colorchooser = types.ModuleType("tkinter.colorchooser")
-        def dummy_askcolor(*args, **kwargs):
-            print("Dummy colorchooser.askcolor called.")
-            return ((0, 0, 0), "#000000")
-        colorchooser.askcolor = dummy_askcolor
-        sys.modules["tkinter.colorchooser"] = colorchooser
-        tkinter.colorchooser = colorchooser
-
-    if "tkinter.ttk" not in sys.modules:
-        ttk = types.ModuleType("tkinter.ttk")
-        # ttk도 비슷하게 대응
-        ttk.Button = lambda *a, **kw: DummyWidget("tkinter.ttk.Button", *a, **kw)
-        ttk.Label = lambda *a, **kw: DummyWidget("tkinter.ttk.Label", *a, **kw)
-        ttk.Entry = lambda *a, **kw: DummyWidget("tkinter.ttk.Entry", *a, **kw)
-        ttk.Frame = lambda *a, **kw: DummyWidget("tkinter.ttk.Frame", *a, **kw)
-        sys.modules["tkinter.ttk"] = ttk
-        tkinter.ttk = ttk
-
-    # tkinter 모듈에도 __getattr__로 모든 속성/메서드 자동 dummy 처리
-    def _tkinter_getattr(name):
-        print(f"[DUMMY] Accessing 'tkinter.{name}'. returning a DummyWidget or DummyTk if needed.")
-        # 혹시 모를 다른 속성 접근 -> DummyWidget 생성
-        return lambda *a, **kw: DummyWidget(f"tkinter.{name}", *a, **kw)
-
-    setattr(tkinter, "__getattr__", _tkinter_getattr)
-
-    sys.modules["tkinter"] = tkinter
-else:
-    # 이미 "tkinter"가 sys.modules에 있다면, 사용자가 별도 세팅한 경우일 수도 있으니 패스
-    pass
-`;
-
-    /*
-      _add_fallback_getattr:
-      - dummy 모듈에 이미 특정 함수/메서드는 정의되었을 수 있으나,
-        사용자가 다른 서브모듈/속성을 호출하면 AttributeError가 날 수 있음.
-      - __getattr__을 이용해 "모든 속성 접근"을 자동으로 처리 -> AttributeError 방지
-    */
+    // “Dummy + __getattr__”로, 사용자가 어떤 함수를 호출하든
+    // “[DUMMY FUNCTION] moduleName.someAttr called” 식의 로그만 찍고 넘어가도록
     function _add_fallback_getattr(moduleName) {
-      // 파이썬 코드로 __getattr__ 재정의
       return `
 def _fallback_getattr(self, attr):
     print(f"[DUMMY] Accessing '${moduleName}.{attr}'. Returning a dummy callable.")
@@ -397,36 +318,203 @@ def _fallback_getattr(self, attr):
     return _dummy
 
 import sys
-
 _mod = sys.modules.get("${moduleName}")
 if _mod is not None and not hasattr(_mod, "__getattr__"):
     setattr(_mod, "__getattr__", _fallback_getattr)
 `;
     }
 
-    // 사용자가 입력한 Python 코드를 분석하여 import할 라이브러리 목록을 추출하는 간단한 정규식
+    // “import” 문 파싱
     function findImports(code) {
-      // 예: "import torch", "import tensorflow as tf", "from keras.models import load_model" ...
-      // 그룹1 = 첫 번째 모듈명
       const importRegex = /(?:^|\n)\s*(?:from\s+([a-zA-Z0-9_\.]+)\s+import|import\s+([a-zA-Z0-9_\.]+))/g;
       let modules = new Set();
       let match;
       while ((match = importRegex.exec(code)) !== null) {
-        // match[1] 또는 match[2] 중에 있는 값이 모듈명
         let modName = match[1] || match[2];
-        // 점이 있는 경우(예: "torch.nn")는 최상위 모듈만 추출("torch")
         let topLevel = modName.split(".")[0];
         modules.add(topLevel);
       }
       return [...modules];
     }
 
+    /************************************************************
+     * 3) 실제 Pyodide 로딩 + 코드 실행 과정
+     ************************************************************/
     async function main() {
+      // Pyodide 로드
       let pyodide = await loadPyodide();
 
+      // 자바스크립트 함수를 파이썬에서 쉽게 호출하기 위해 등록
+      // 예: python에서 import js; js.createTkRoot()
+      pyodide.globals.set("js_createTkRoot", createTkRoot);
+      pyodide.globals.set("js_setTkTitle", setTkTitle);
+      pyodide.globals.set("js_setTkGeometry", setTkGeometry);
+      pyodide.globals.set("js_createTkWidget", createTkWidget);
+      pyodide.globals.set("js_layoutWidget", layoutWidget);
+
+      pyodide.globals.set("js_msgbox_showinfo", msgbox_showinfo);
+      pyodide.globals.set("js_msgbox_showerror", msgbox_showerror);
+      pyodide.globals.set("js_msgbox_askyesno", msgbox_askyesno);
+      pyodide.globals.set("js_msgbox_askokcancel", msgbox_askokcancel);
+
+      pyodide.globals.set("js_dialog_askstring", dialog_askstring);
+      pyodide.globals.set("js_dialog_askinteger", dialog_askinteger);
+      pyodide.globals.set("js_dialog_askfloat", dialog_askfloat);
+
+      pyodide.globals.set("js_filedialog_askopenfilename", filedialog_askopenfilename);
+      pyodide.globals.set("js_filedialog_asksaveasfilename", filedialog_asksaveasfilename);
+      pyodide.globals.set("js_filedialog_askdirectory", filedialog_askdirectory);
+
+      // “tkinter”를 브라우저 대체 코드로 덮어씌우는 파이썬 코드
+      // - 실제 window는 없지만, js_* 함수들을 호출하여 HTML/팝업을 만듦
+      let dummyTkinter = `
+import sys, types
+
+class DummyTk:
+    def __init__(self, *args, **kwargs):
+        self._root_id = js_createTkRoot()
+    def title(self, txt):
+        js_setTkTitle(self._root_id, txt)
+    def geometry(self, geo):
+        js_setTkGeometry(self._root_id, geo)
+    def mainloop(self):
+        print("대체: tkinter.mainloop() - 브라우저상에 이미 렌더링 중")
+
+# 대표 위젯들
+class DummyButton:
+    def __init__(self, master=None, **kwargs):
+        # master: Tk 또는 Frame 등이 될 수 있음
+        # master가 DummyTk라면 ._root_id가 있을 것
+        self.master = master
+        self.kwargs = kwargs
+        if hasattr(master, "_root_id"):
+            self._root_id = master._root_id
+        else:
+            # 혹은 상위 widget에도 _root_id가 있을 수 있음
+            self._root_id = getattr(master, "_root_id", None)
+        if self._root_id is None:
+            print("[경고] Button을 놓을 Tk root_id를 찾지 못함.")
+        else:
+            import json
+            js_createTkWidget(self._root_id, "Button", json.dumps(kwargs))
+
+    # pack, grid 등은 그냥 JS 함수로 넘겨서 로그만
+    def pack(self, **kwargs):
+        import json
+        js_layoutWidget("???", "pack", json.dumps(kwargs))
+    def grid(self, **kwargs):
+        import json
+        js_layoutWidget("???", "grid", json.dumps(kwargs))
+
+class DummyLabel:
+    def __init__(self, master=None, **kwargs):
+        self.master = master
+        self.kwargs = kwargs
+        if hasattr(master, "_root_id"):
+            self._root_id = master._root_id
+        else:
+            self._root_id = getattr(master, "_root_id", None)
+        if self._root_id is None:
+            print("[경고] Label을 놓을 Tk root_id를 찾지 못함.")
+        else:
+            import json
+            js_createTkWidget(self._root_id, "Label", json.dumps(kwargs))
+    def pack(self, **kwargs):
+        import json
+        js_layoutWidget("???", "pack", json.dumps(kwargs))
+    def grid(self, **kwargs):
+        import json
+        js_layoutWidget("???", "grid", json.dumps(kwargs))
+
+class DummyFrame:
+    def __init__(self, master=None, **kwargs):
+        # Frame도 root_id는 같지만, 일단 별도 관리
+        self._root_id = getattr(master, "_root_id", None)
+    def pack(self, **kwargs):
+        pass
+    def grid(self, **kwargs):
+        pass
+
+# filedialog
+filedialog = types.ModuleType("tkinter.filedialog")
+def dummy_askopenfilename(*args, **kwargs):
+    return js_filedialog_askopenfilename()
+def dummy_asksaveasfilename(*args, **kwargs):
+    return js_filedialog_asksaveasfilename()
+def dummy_askdirectory(*args, **kwargs):
+    return js_filedialog_askdirectory()
+filedialog.askopenfilename = dummy_askopenfilename
+filedialog.asksaveasfilename = dummy_asksaveasfilename
+filedialog.askdirectory = dummy_askdirectory
+
+# messagebox
+messagebox = types.ModuleType("tkinter.messagebox")
+def dummy_showinfo(title, message):
+    js_msgbox_showinfo(title, message)
+def dummy_showerror(title, message):
+    js_msgbox_showerror(title, message)
+def dummy_askyesno(title, message):
+    return js_msgbox_askyesno(title, message)
+def dummy_askokcancel(title, message):
+    return js_msgbox_askokcancel(title, message)
+messagebox.showinfo = dummy_showinfo
+messagebox.showerror = dummy_showerror
+messagebox.askyesno = dummy_askyesno
+messagebox.askokcancel = dummy_askokcancel
+
+# simpledialog
+simpledialog = types.ModuleType("tkinter.simpledialog")
+def dummy_askstring(title, prompt, **kwargs):
+    return js_dialog_askstring(title, prompt)
+def dummy_askinteger(title, prompt, **kwargs):
+    return js_dialog_askinteger(title, prompt)
+def dummy_askfloat(title, prompt, **kwargs):
+    return js_dialog_askfloat(title, prompt)
+simpledialog.askstring = dummy_askstring
+simpledialog.askinteger = dummy_askinteger
+simpledialog.askfloat = dummy_askfloat
+
+# colorchooser
+colorchooser = types.ModuleType("tkinter.colorchooser")
+def dummy_askcolor(*args, **kwargs):
+    print("대체: askcolor -> (0,0,0), '#000000'")
+    return ((0,0,0), "#000000")
+colorchooser.askcolor = dummy_askcolor
+
+# ttk
+ttk = types.ModuleType("tkinter.ttk")
+class DummyTtkButton(DummyButton):
+    pass
+class DummyTtkLabel(DummyLabel):
+    pass
+
+ttk.Button = DummyTtkButton
+ttk.Label = DummyTtkLabel
+# 필요시 ttk.Entry, ttk.Frame 등도 유사하게
+
+if "tkinter" not in sys.modules:
+    tkinter_mod = types.ModuleType("tkinter")
+    tkinter_mod.Tk = DummyTk
+    tkinter_mod.Button = DummyButton
+    tkinter_mod.Label = DummyLabel
+    tkinter_mod.Frame = DummyFrame
+    tkinter_mod.filedialog = filedialog
+    tkinter_mod.messagebox = messagebox
+    tkinter_mod.simpledialog = simpledialog
+    tkinter_mod.colorchooser = colorchooser
+    tkinter_mod.ttk = ttk
+
+    def dummy_mainloop():
+        print("대체: tkinter.mainloop")
+
+    tkinter_mod.mainloop = dummy_mainloop
+
+    sys.modules["tkinter"] = tkinter_mod
+`;
+
+      // URL Query 확인 ( ?=base64 파라미터 )
       var query = window.location.search;
       if (query.startsWith("?=") && query.length > 2) {
-        // URL 쿼리에서 코드 복원
         var encoded = query.substring(2);
         var userCode;
         try {
@@ -437,17 +525,15 @@ if _mod is not None and not hasattr(_mod, "__getattr__"):
           return;
         }
         displayOutput();
-
         let outputElement = document.getElementById("output");
         outputElement.textContent = ""; // 출력 영역 초기화
 
-        // JS -> Py 출력 연결
+        // Py에 콘솔 출력 연결
         function writeOutput(s) {
           outputElement.textContent += s;
         }
         pyodide.globals.set("write_output", writeOutput);
 
-        // stdout / stderr를 JSWriter로 교체
         await pyodide.runPythonAsync(`
 import sys
 class JSWriter:
@@ -459,17 +545,17 @@ sys.stdout = JSWriter()
 sys.stderr = JSWriter()
 `);
 
-        // 1) 사용자가 작성한 코드에서 import 되는 모듈 조사
+        // 1) 사용자가 작성한 code에서 import 목록 파악
         let importedModules = findImports(userCode);
 
-        // 2) micropip로 설치해야 할 애들 골라서 설치 (이미 Pyodide에 포함된 numpy/pandas 등은 제외)
+        // 2) micropip로 설치할 것들
         let toInstall = [];
         for (let m of importedModules) {
           if (micropipInstallable[m]) {
             toInstall.push(micropipInstallable[m]);
           }
         }
-        if (toInstall.length > 0) {
+        if (toInstall.length>0) {
           try {
             writeOutput("Installing packages: " + toInstall.join(", ") + "\\n");
             await pyodide.runPythonAsync(`
@@ -483,80 +569,75 @@ async def install_packages(pkgs):
 
 asyncio.run(install_packages(${JSON.stringify(toInstall)}))
 `);
-          } catch (e) {
+          } catch(e) {
             writeOutput("\\nError while installing packages: " + e.toString());
           }
         }
 
-        // 3) “더미 모듈”이어야 할 애들 골라서, 간단한 동작을 하는 파이썬 모듈 코드 실행
+        // 3) tkinter가 import되었으면 -> dummyTkinter 대체 적용
         let dummyCode = "";
-        // tkinter는 import가 하나라도 있으면 전체 하위 모듈까지 정의
         if (importedModules.includes("tkinter")) {
           dummyCode += dummyTkinter + "\n";
         }
-        for (let [modName, dummyPy] of Object.entries(dummyModules)) {
+        // 3-1) 기타 미지원 라이브러리는 dummy 모듈 생성
+        for (let [modName, modPy] of Object.entries(dummyModules)) {
           if (importedModules.includes(modName)) {
-            dummyCode += dummyPy + "\n";
+            dummyCode += modPy + "\n";
           }
         }
-
-        // 3-1) “더미 모듈”에 대해서도 __getattr__로 fallback 처리해서 AttributeError 방지
+        // 3-2) dummy 모듈들에 __getattr__ 등록
         for (let modName of importedModules) {
-          if (modName === "tkinter") {
-            // tkinter는 이미 dummyTkinter 내부에서 __getattr__ 붙였으므로 생략
-            continue;
-          }
+          if (modName==="tkinter") continue;  // tkinter는 별도 처리
           if (dummyModules[modName]) {
             dummyCode += _add_fallback_getattr(modName) + "\n";
           }
         }
 
-        if (dummyCode.trim().length > 0) {
+        if (dummyCode.trim()) {
           try {
             await pyodide.runPythonAsync(dummyCode);
-          } catch (e) {
+          } catch(e) {
             writeOutput("\\nError while creating dummy modules: " + e.toString());
           }
         }
 
-        // 4) 최종적으로 사용자가 작성한 코드 실행
+        // 4) 최종적으로 사용자 코드를 실행
         try {
           let result = await pyodide.runPythonAsync(userCode);
           if (result !== undefined && result !== null) {
             writeOutput("\\n" + result.toString());
           }
-        } catch (e) {
+        } catch(e) {
           let errorMsg = e.toString();
           writeOutput("\\nError: " + errorMsg);
         }
+
       } else {
-        // 쿼리가 없으면 입력창 표시
+        // code 입력창 표시
         displayInput();
       }
     }
 
-    // 코드 입력창과 실행 버튼을 표시하는 함수
     function displayInput() {
-      var container = document.getElementById("container");
+      let container = document.getElementById("container");
       container.innerHTML =
         '<textarea id="codeInput" placeholder="여기에 Python 코드를 입력하세요"></textarea><br>' +
         '<button id="executeBtn">실행</button>';
       document.getElementById("executeBtn").addEventListener("click", function() {
-        var code = document.getElementById("codeInput").value;
+        let code = document.getElementById("codeInput").value;
+        let encoded;
         try {
-          var encoded = b64EncodeUnicode(code);
+          encoded = b64EncodeUnicode(code);
         } catch(e) {
-          alert("인코딩 중 오류가 발생했습니다: " + e);
+          alert("인코딩 중 오류: " + e);
           return;
         }
-        // 현재 URL의 프로토콜, 호스트, pathname 유지하며 쿼리 스트링에 base64 인코딩된 코드를 추가
         window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
       });
     }
 
-    // 실행 결과를 보여줄 전체 화면 출력 영역을 표시하는 함수
     function displayOutput() {
-      var container = document.getElementById("container");
+      let container = document.getElementById("container");
       container.innerHTML = '<pre id="output"></pre>';
     }
 
