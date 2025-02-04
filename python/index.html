@@ -2,6 +2,11 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
+  <!-- 캐시 무효화를 위한 메타 태그들 -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <title>Python Code Executor</title>
   <style>
     html, body {
@@ -63,9 +68,30 @@
   <div id="container"></div>
   
   <script>
+    'use strict';
+
+    /************************************************************
+     * [중요] base64 인코딩/디코딩 함수를 전역(window) 스코프에 선언
+     *        어떤 환경에서도 참조 가능하도록!
+     ************************************************************/
+    window.b64EncodeUnicode = function(str) {
+      return btoa(
+        encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+          return String.fromCharCode(parseInt(p1, 16));
+        })
+      );
+    };
+
+    window.b64DecodeUnicode = function(str) {
+      return decodeURIComponent(
+        atob(str).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join('')
+      );
+    };
+
     /************************************************************
      * 1) 자바스크립트 측 "브라우저 GUI" 대체 함수들
-     *   - python code에서 js 함수를 호출하기 위해 pyodide.globals에 등록할 예정
      ************************************************************/
     
     // 루트 창( tk = tkinter.Tk() ) 하나가 만들어질 때마다
@@ -94,7 +120,6 @@
 
     // geometry() -> 여기선 간단히 무시 (원하면 el.style.width/height 적용 가능)
     function setTkGeometry(rootId, geo) {
-      // 예: "300x150" 이런걸 파싱해서 style 지정할 수도 있음
       console.log(`(대체) geometry(${geo}) 호출됨 - 실제 반영은 생략`);
     }
 
@@ -157,12 +182,12 @@
 
     // simpledialog.askstring -> prompt
     function dialog_askstring(title, prompt, defaultVal="") {
-      let result = prompt(`[askstring] ${title}\n\n${prompt}`, defaultVal);
-      return result===null ? "" : result;  // null이면 빈 문자열
+      let result = window.prompt(`[askstring] ${title}\n\n${prompt}`, defaultVal);
+      return result===null ? "" : result;
     }
     // simpledialog.askinteger -> prompt 후 int 변환 시도
     function dialog_askinteger(title, prompt, defaultVal="0") {
-      let result = prompt(`[askinteger] ${title}\n\n${prompt}`, defaultVal);
+      let result = window.prompt(`[askinteger] ${title}\n\n${prompt}`, defaultVal);
       if (result===null) return null;
       let parsed = parseInt(result, 10);
       if (isNaN(parsed)) return null;
@@ -170,7 +195,7 @@
     }
     // simpledialog.askfloat -> prompt 후 float 변환 시도
     function dialog_askfloat(title, prompt, defaultVal="0.0") {
-      let result = prompt(`[askfloat] ${title}\n\n${prompt}`, defaultVal);
+      let result = window.prompt(`[askfloat] ${title}\n\n${prompt}`, defaultVal);
       if (result===null) return null;
       let parsed = parseFloat(result);
       if (isNaN(parsed)) return null;
@@ -180,15 +205,15 @@
     // filedialog.askopenfilename -> <input type="file">을 임시로 띄워서 사용자에게 파일 선택하도록
     //   여기서는 간단히 JS prompt로 파일명만 받아온다고 가정
     function filedialog_askopenfilename() {
-      let path = prompt("[askopenfilename] 파일 경로를 직접 입력하세요:", "");
+      let path = window.prompt("[askopenfilename] 파일 경로를 직접 입력하세요:", "");
       return path || "";
     }
     function filedialog_asksaveasfilename() {
-      let path = prompt("[asksaveasfilename] 저장할 파일 경로 입력:", "");
+      let path = window.prompt("[asksaveasfilename] 저장할 파일 경로 입력:", "");
       return path || "";
     }
     function filedialog_askdirectory() {
-      let path = prompt("[askdirectory] 디렉토리 경로 입력:", "");
+      let path = window.prompt("[askdirectory] 디렉토리 경로 입력:", "");
       return path || "";
     }
 
@@ -313,7 +338,7 @@ if "cryptography" not in sys.modules:
 def _fallback_getattr(self, attr):
     print(f"[DUMMY] Accessing '${moduleName}.{attr}'. Returning a dummy callable.")
     def _dummy(*args, **kwargs):
-        print(f"[DUMMY FUNCTION] ${moduleName}.{attr} called with args={{args}}, kwargs={{kwargs}}")
+        print(f"[DUMMY FUNCTION] ${moduleName}.${attr} called with args={{args}}, kwargs={{kwargs}}")
         return None
     return _dummy
 
@@ -383,14 +408,11 @@ class DummyTk:
 # 대표 위젯들
 class DummyButton:
     def __init__(self, master=None, **kwargs):
-        # master: Tk 또는 Frame 등이 될 수 있음
-        # master가 DummyTk라면 ._root_id가 있을 것
         self.master = master
         self.kwargs = kwargs
         if hasattr(master, "_root_id"):
             self._root_id = master._root_id
         else:
-            # 혹은 상위 widget에도 _root_id가 있을 수 있음
             self._root_id = getattr(master, "_root_id", None)
         if self._root_id is None:
             print("[경고] Button을 놓을 Tk root_id를 찾지 못함.")
@@ -398,7 +420,6 @@ class DummyButton:
             import json
             js_createTkWidget(self._root_id, "Button", json.dumps(kwargs))
 
-    # pack, grid 등은 그냥 JS 함수로 넘겨서 로그만
     def pack(self, **kwargs):
         import json
         js_layoutWidget("???", "pack", json.dumps(kwargs))
@@ -428,7 +449,6 @@ class DummyLabel:
 
 class DummyFrame:
     def __init__(self, master=None, **kwargs):
-        # Frame도 root_id는 같지만, 일단 별도 관리
         self._root_id = getattr(master, "_root_id", None)
     def pack(self, **kwargs):
         pass
@@ -490,7 +510,6 @@ class DummyTtkLabel(DummyLabel):
 
 ttk.Button = DummyTtkButton
 ttk.Label = DummyTtkLabel
-# 필요시 ttk.Entry, ttk.Frame 등도 유사하게
 
 if "tkinter" not in sys.modules:
     tkinter_mod = types.ModuleType("tkinter")
@@ -508,7 +527,6 @@ if "tkinter" not in sys.modules:
         print("대체: tkinter.mainloop")
 
     tkinter_mod.mainloop = dummy_mainloop
-
     sys.modules["tkinter"] = tkinter_mod
 `;
 
@@ -518,7 +536,7 @@ if "tkinter" not in sys.modules:
         var encoded = query.substring(2);
         var userCode;
         try {
-          userCode = b64DecodeUnicode(encoded);
+          userCode = window.b64DecodeUnicode(encoded);
         } catch (e) {
           alert("URL에 있는 base64 코드가 올바르지 않습니다. 다시 코드를 입력해주세요.");
           displayInput();
@@ -627,7 +645,7 @@ asyncio.run(install_packages(${JSON.stringify(toInstall)}))
         let code = document.getElementById("codeInput").value;
         let encoded;
         try {
-          encoded = b64EncodeUnicode(code);
+          encoded = window.b64EncodeUnicode(code);
         } catch(e) {
           alert("인코딩 중 오류: " + e);
           return;
