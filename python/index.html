@@ -81,26 +81,30 @@
     // Pyodide에서 완벽히 동작할 수는 없지만,
     // "대충"이라도 사용 가능한 더미 모듈을 만들어줄 대상
     // (key: 모듈이름, value: 파이썬 코드 문자열)
-    // 필요하다면 각 모듈마다 몇 개의 함수를 가짜로 구현해둘 수 있습니다.
+    // 여기서 더미 모듈 생성 후 -> 아래서 공통 "__getattr__" 방식으로 확장
     const dummyModules = {
       "tensorflow": `
 import types, sys
+
 if "tensorflow" not in sys.modules:
     tf_dummy = types.ModuleType("tensorflow")
     def dummy_constant(value):
         print("Dummy tf.constant called with value:", value)
         return value
     tf_dummy.constant = dummy_constant
-    # 간단 예시로 keras 서브모듈도 가짜로 달아줄 수 있음
+
+    # keras 서브모듈도 가짜로 달아줄 수 있음
     keras_mod = types.ModuleType("tensorflow.keras")
     def dummy_sequential(*args, **kwargs):
         print("Dummy keras.Sequential called.")
     keras_mod.Sequential = dummy_sequential
     tf_dummy.keras = keras_mod
+
     sys.modules["tensorflow"] = tf_dummy
 `,
       "torch": `
 import types, sys
+
 if "torch" not in sys.modules:
     torch_dummy = types.ModuleType("torch")
     def dummy_tensor(value):
@@ -111,6 +115,7 @@ if "torch" not in sys.modules:
 `,
       "cv2": `
 import types, sys
+
 if "cv2" not in sys.modules:
     cv2_dummy = types.ModuleType("cv2")
     def dummy_imread(path):
@@ -121,6 +126,7 @@ if "cv2" not in sys.modules:
 `,
       "keras": `
 import types, sys
+
 if "keras" not in sys.modules:
     keras_dummy = types.ModuleType("keras")
     def dummy_model(*args, **kwargs):
@@ -130,6 +136,7 @@ if "keras" not in sys.modules:
 `,
       "flask": `
 import types, sys
+
 if "flask" not in sys.modules:
     flask = types.ModuleType("flask")
     class DummyFlask:
@@ -142,6 +149,7 @@ if "flask" not in sys.modules:
 `,
       "django": `
 import types, sys
+
 if "django" not in sys.modules:
     django_mod = types.ModuleType("django")
     print("Dummy django module created.")
@@ -149,6 +157,7 @@ if "django" not in sys.modules:
 `,
       "fastapi": `
 import types, sys
+
 if "fastapi" not in sys.modules:
     fa_mod = types.ModuleType("fastapi")
     class DummyFastAPI:
@@ -161,6 +170,7 @@ if "fastapi" not in sys.modules:
 `,
       "selenium": `
 import types, sys
+
 if "selenium" not in sys.modules:
     sel = types.ModuleType("selenium")
     print("Dummy selenium module created.")
@@ -168,6 +178,7 @@ if "selenium" not in sys.modules:
 `,
       "pygame": `
 import types, sys
+
 if "pygame" not in sys.modules:
     pg = types.ModuleType("pygame")
     def dummy_init():
@@ -177,6 +188,7 @@ if "pygame" not in sys.modules:
 `,
       "wx": `
 import types, sys
+
 if "wx" not in sys.modules:
     wx_mod = types.ModuleType("wx")
     print("Dummy wxPython module created.")
@@ -184,6 +196,7 @@ if "wx" not in sys.modules:
 `,
       "PyQt5": `
 import types, sys
+
 if "PyQt5" not in sys.modules:
     pyqt = types.ModuleType("PyQt5")
     print("Dummy PyQt5 module created.")
@@ -191,6 +204,7 @@ if "PyQt5" not in sys.modules:
 `,
       "sqlalchemy": `
 import types, sys
+
 if "sqlalchemy" not in sys.modules:
     sa = types.ModuleType("sqlalchemy")
     print("Dummy sqlalchemy module created.")
@@ -198,6 +212,7 @@ if "sqlalchemy" not in sys.modules:
 `,
       "paramiko": `
 import types, sys
+
 if "paramiko" not in sys.modules:
     pm = types.ModuleType("paramiko")
     print("Dummy paramiko module created.")
@@ -205,6 +220,7 @@ if "paramiko" not in sys.modules:
 `,
       "twisted": `
 import types, sys
+
 if "twisted" not in sys.modules:
     tw = types.ModuleType("twisted")
     print("Dummy twisted module created.")
@@ -212,6 +228,7 @@ if "twisted" not in sys.modules:
 `,
       "PyInstaller": `
 import types, sys
+
 if "PyInstaller" not in sys.modules:
     pi = types.ModuleType("PyInstaller")
     print("Dummy PyInstaller module created.")
@@ -219,6 +236,7 @@ if "PyInstaller" not in sys.modules:
 `,
       "cryptography": `
 import types, sys
+
 if "cryptography" not in sys.modules:
     cr = types.ModuleType("cryptography")
     print("Dummy cryptography module created.")
@@ -228,31 +246,42 @@ if "cryptography" not in sys.modules:
 
     // tkinter 포함 각종 tkinter 하위 모듈(파일대화상자, 메시지박스, simpledialog, colorchooser, ttk)도
     // 사용자가 import하면 "대충" 동작하도록 만들어줍니다.
-    // 기존 코드에서 object()로 반환하던 부분에, title(), geometry() 등을 흉내 낸 DummyTk 클래스를 정의해
-    // AttributeError('object' has no attribute 'title') 문제를 해결합니다.
+    // 기존에 쓰던 DummyTk 에 더 많은 메서드를 흉내 내고,
+    // __getattr__로 모든 호출을 안전하게 처리.
     const dummyTkinter = `
 import sys, types
 
-class DummyTk:
+class _AttrSafe:
+    """
+    모든 속성 접근을 안전하게 처리하는 헬퍼 클래스.
+    """
+    def __init__(self, name="_AttrSafe"):
+        self.__dict__["_dummy_name"] = name
+
+    def __getattr__(self, item):
+        def dummy_method(*args, **kwargs):
+            print(f"[{self._dummy_name}.{item}] called with args={args}, kwargs={kwargs}")
+            return self  # 계속 체인 가능
+        return dummy_method
+
+    def __setattr__(self, key, value):
+        print(f"[{self._dummy_name}] setattr {key}={value}")
+
+class DummyTk(_AttrSafe):
     def __init__(self, *args, **kwargs):
+        super().__init__(name="tkinter.Tk")
         print("Dummy tkinter.Tk created. (실제 GUI는 사용할 수 없습니다.)")
-    def title(self, text):
-        print(f"Dummy tkinter.Tk.title({text}) called.")
-    def geometry(self, geo):
-        print(f"Dummy tkinter.Tk.geometry({geo}) called.")
-    def configure(self, **kwargs):
-        print(f"Dummy tkinter.Tk.configure(...) called with: {kwargs}")
-    def mainloop(self):
-        print("Dummy tkinter.mainloop called.")
 
 if "tkinter" not in sys.modules:
     tkinter = types.ModuleType("tkinter")
+    # 주: 실제 tkinter.Tk(...) -> DummyTk
     tkinter.Tk = DummyTk
-    tkinter.mainloop = lambda: print("Dummy tkinter.mainloop called. (직접 Tk.mainloop()를 쓰세요.)")
+    tkinter.mainloop = lambda: print("Dummy tkinter.mainloop called.")
     sys.modules["tkinter"] = tkinter
 else:
     tkinter = sys.modules["tkinter"]
 
+# 하위 모듈들
 if "tkinter.filedialog" not in sys.modules:
     filedialog = types.ModuleType("tkinter.filedialog")
     def dummy_askopenfilename(*args, **kwargs):
@@ -317,20 +346,46 @@ if "tkinter.colorchooser" not in sys.modules:
 
 if "tkinter.ttk" not in sys.modules:
     ttk = types.ModuleType("tkinter.ttk")
-    class DummyWidget:
+    class DummyWidget(_AttrSafe):
         def __init__(self, *args, **kwargs):
+            super().__init__(name="tkinter.ttk.Widget")
             print("Dummy ttk widget created.")
-        def pack(self, *args, **kwargs):
-            pass
-        def grid(self, *args, **kwargs):
-            pass
+    # Button, Label, etc. 전부 이 클래스 이용
     ttk.Widget = DummyWidget
     ttk.Button = DummyWidget
     ttk.Label = DummyWidget
     ttk.Entry = DummyWidget
+    ttk.Frame = DummyWidget
     sys.modules["tkinter.ttk"] = ttk
     tkinter.ttk = ttk
 `;
+
+    /*
+      _add_fallback_getattr:
+      - dummy 모듈에 이미 특정 함수/메서드는 정의되었을 수 있으나,
+        사용자가 다른 서브모듈/속성을 호출하면 AttributeError가 날 수 있음.
+      - __getattr__을 이용해 "모든 속성 접근"을 자동으로 처리 -> AttributeError 방지
+    */
+    function _add_fallback_getattr(moduleName) {
+      // 파이썬 코드로 __getattr__ 재정의
+      return `
+def _fallback_getattr(self, attr):
+    print(f"[DUMMY] Accessing '{moduleName}.{attr}'. Returning a dummy callable.")
+    def _dummy(*args, **kwargs):
+        print(f"[DUMMY FUNCTION] {moduleName}.{attr} called with args={{args}}, kwargs={{kwargs}}")
+        return None
+    return _dummy
+
+import sys
+
+_mod = sys.modules.get("${moduleName}")
+if _mod is not None:
+    # 파이썬의 ModuleType에 __getattr__을 다이렉트로 집어넣기 어려우므로,
+    # __getattr__ = function 형태로 할당해 줍니다 (Python 3.7+).
+    if not hasattr(_mod, "__getattr__"):
+        setattr(_mod, "__getattr__", _fallback_getattr)
+`;
+    }
 
     // 사용자가 입력한 Python 코드를 분석하여 import할 라이브러리 목록을 추출하는 간단한 정규식
     // (주의: 아주 복잡한 import 문까지 100% 정확히 처리하진 못하지만, 일반적인 형태는 잘 잡아냄)
@@ -391,8 +446,7 @@ sys.stderr = JSWriter()
         // 1) 사용자가 작성한 코드에서 import 되는 모듈 조사
         let importedModules = findImports(userCode);
 
-        // 2) micropip로 설치해야 할 애들 골라서 설치
-        //    (이미 Pyodide에 포함된 numpy/pandas 등은 여기서 제외)
+        // 2) micropip로 설치해야 할 애들 골라서 설치 (이미 Pyodide 포함 라이브러리는 제외)
         let toInstall = [];
         for (let m of importedModules) {
           if (micropipInstallable[m]) {
@@ -419,6 +473,7 @@ asyncio.run(install_packages(${JSON.stringify(toInstall)}))
         }
 
         // 3) “더미 모듈”이어야 할 애들 골라서, 간단한 동작을 하는 파이썬 모듈 코드 실행
+        //    (tkinter, tensorflow, torch, 등등)
         let dummyCode = "";
         // tkinter는 import가 하나라도 있으면 전체 하위 모듈까지 정의
         if (importedModules.includes("tkinter")) {
@@ -429,6 +484,19 @@ asyncio.run(install_packages(${JSON.stringify(toInstall)}))
             dummyCode += dummyPy + "\n";
           }
         }
+
+        // 3-1) “더미 모듈”에 대해서도 __getattr__로 fallback 처리해서 AttributeError 방지
+        for (let modName of importedModules) {
+          if (modName === "tkinter") {
+            // tkinter는 이미 dummyTkinter 내부에서 __getattr__ 대신
+            // 개별 클래스로 처리했으므로 생략
+            continue;
+          }
+          if (dummyModules[modName]) {
+            dummyCode += _add_fallback_getattr(modName) + "\n";
+          }
+        }
+
         if (dummyCode.trim().length > 0) {
           try {
             await pyodide.runPythonAsync(dummyCode);
