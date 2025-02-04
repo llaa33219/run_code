@@ -56,17 +56,15 @@
         return String.fromCharCode(parseInt(p1, 16));
       }));
     }
-
     function b64DecodeUnicode(str) {
       return decodeURIComponent(atob(str).split('').map(function(c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
       }).join(''));
     }
-
     async function main() {
       let pyodide = await loadPyodide();
-
-      // Setup dummy modules to "support" libraries that are not natively supported in Pyodide.
+      
+      // Setup dummy modules for unsupported libraries (tkinter, tkinter.filedialog, Flask, etc.)
       await pyodide.runPythonAsync(`
 import sys
 import types
@@ -80,6 +78,22 @@ if "tkinter" not in sys.modules:
     tkinter.Tk = dummy_Tk
     tkinter.mainloop = lambda: print("Dummy tkinter.mainloop called. (실제 tkinter는 Pyodide에서 지원되지 않습니다.)")
     sys.modules["tkinter"] = tkinter
+else:
+    tkinter = sys.modules["tkinter"]
+
+# Dummy tkinter.filedialog submodule
+if "tkinter.filedialog" not in sys.modules:
+    filedialog = types.ModuleType("tkinter.filedialog")
+    def dummy_askopenfilename(*args, **kwargs):
+        print("Dummy tkinter.filedialog.askopenfilename called. (실제 tkinter.filedialog는 Pyodide에서 지원되지 않습니다.)")
+        return ""
+    def dummy_asksaveasfilename(*args, **kwargs):
+        print("Dummy tkinter.filedialog.asksaveasfilename called. (실제 tkinter.filedialog는 Pyodide에서 지원되지 않습니다.)")
+        return ""
+    filedialog.askopenfilename = dummy_askopenfilename
+    filedialog.asksaveasfilename = dummy_asksaveasfilename
+    tkinter.filedialog = filedialog
+    sys.modules["tkinter.filedialog"] = filedialog
 
 # Dummy flask module
 if "flask" not in sys.modules:
@@ -92,9 +106,9 @@ if "flask" not in sys.modules:
     flask.Flask = DummyFlask
     sys.modules["flask"] = flask
       `);
-
+      
       var query = window.location.search;
-      if (query.startsWith("?=") && query.length > 2) {
+      if(query.startsWith("?=") && query.length > 2) {
         var encoded = query.substring(2);
         var code;
         try {
@@ -127,7 +141,7 @@ sys.stdout = sys.stderr = JSWriter()
         try {
           // 입력된 Python 코드를 실행
           let result = await pyodide.runPythonAsync(code);
-          if (result !== undefined && result !== null) {
+          if(result !== undefined && result !== null) {
             writeOutput("\\n" + result.toString());
           }
         } catch(e) {
@@ -138,7 +152,6 @@ sys.stdout = sys.stderr = JSWriter()
         displayInput();
       }
     }
-
     // 코드 입력창과 실행 버튼을 표시하는 함수
     function displayInput() {
       var container = document.getElementById("container");
@@ -157,13 +170,11 @@ sys.stdout = sys.stderr = JSWriter()
         window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
       });
     }
-
     // 실행 결과를 보여줄 전체 화면 출력 영역을 표시하는 함수
     function displayOutput() {
       var container = document.getElementById("container");
       container.innerHTML = '<pre id="output"></pre>';
     }
-
     main();
   </script>
 </body>
