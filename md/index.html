@@ -24,6 +24,35 @@
 </head>
 <body>
 <script>
+// Unicode 문자열을 안전하게 Base64로 인코딩하는 함수
+function base64EncodeUnicode(str) {
+  // modern 브라우저 TextEncoder 사용
+  if (window.TextEncoder) {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    let binary = '';
+    bytes.forEach(b => binary += String.fromCharCode(b));
+    return btoa(binary);
+  } else {
+    // fallback
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+}
+
+// Base64 문자열을 안전하게 Unicode 문자열로 디코딩하는 함수
+function base64DecodeUnicode(str) {
+  // modern 브라우저 TextDecoder 사용
+  if (window.TextDecoder) {
+    const binary = atob(str);
+    const bytes = new Uint8Array([...binary].map(ch => ch.charCodeAt(0)));
+    const decoder = new TextDecoder();
+    return decoder.decode(bytes);
+  } else {
+    // fallback
+    return decodeURIComponent(escape(atob(str)));
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   // URL 쿼리스트링이 "?=" 로 시작하면 -> 마크다운 뷰어 모드
   if (location.search.startsWith('?=')) {
@@ -35,7 +64,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     var markdownContent = "";
     try {
-      markdownContent = atob(encodedPart);
+      markdownContent = base64DecodeUnicode(encodedPart);
     } catch(e) {
       markdownContent = "Base64 디코딩에 실패했습니다.";
       console.error("Base64 디코딩 실패:", e);
@@ -59,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('runButton').addEventListener('click', function() {
       var code = document.getElementById('codeInput').value;
       try {
-        var encoded = btoa(code);
+        var encoded = base64EncodeUnicode(code);
         encoded = encodeURIComponent(encoded);
         // 현재 URL의 origin과 pathname을 그대로 사용하여 "?=" 뒤에 base64 인코딩된 코드를 추가
         window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
