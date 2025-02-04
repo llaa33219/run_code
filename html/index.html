@@ -54,10 +54,10 @@
   }
 
   (function(){
-    var query = window.location.search;
-    // URL 쿼리스트링이 "?="로 시작하고 내용이 있다면
-    if (query && query.indexOf('?=') === 0 && query.length > 2) {
-      var encoded = query.substring(2); // "?=" 이후의 문자열 추출
+    var hash = window.location.hash;
+    // URL 해시가 "#="로 시작하고 내용이 있다면
+    if (hash && hash.indexOf('#=') === 0 && hash.length > 2) {
+      var encoded = hash.substring(2); // "#=" 이후의 문자열 추출
       try {
         // Base64 디코딩 (HTML 코드라고 가정)
         var decoded = b64DecodeUnicode(encoded);
@@ -69,7 +69,7 @@
         document.body.innerHTML = "<h2>디코딩 오류</h2><p>" + e.toString() + "</p>";
       }
     } else {
-      // 쿼리스트링이 없으면 코드 입력창과 실행 버튼 제공
+      // 해시가 없으면 코드 입력창과 실행 버튼 제공
       var container = document.createElement('div');
       container.id = 'editorContainer';
       
@@ -81,13 +81,13 @@
       button.id = 'runButton';
       button.innerText = "실행";
       
-      // 버튼 클릭 시 입력된 코드를 Base64 인코딩하여 URL에 적용 후 리다이렉트
+      // 버튼 클릭 시 입력된 코드를 Base64 인코딩하여 URL 해시에 적용 후 리다이렉트
       button.addEventListener('click', function(){
         var code = textarea.value;
         try {
           var encodedCode = b64EncodeUnicode(code);
-          // 현재 도메인과 경로에 ?=encodedCode 추가하여 페이지 이동
-          window.location.href = window.location.origin + window.location.pathname + '?=' + encodedCode;
+          // 현재 도메인과 경로에 #=encodedCode 추가하여 페이지 이동
+          window.location.href = window.location.origin + window.location.pathname + '#=' + encodedCode;
         } catch(e) {
           alert("인코딩 중 오류가 발생했습니다: " + e.toString());
         }
