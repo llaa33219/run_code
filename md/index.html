@@ -6,7 +6,7 @@
   <title>Markdown Viewer &amp; Editor</title>
   <!-- 원본 그대로 링크 -->
   <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <style>
     html, body {
       margin: 0;
@@ -25,83 +25,45 @@
 </head>
 <body>
 <script>
-  // Unicode 문자열을 안전하게 압축 및 Base64 인코딩하는 함수
-  function compressAndEncode(str) {
-    // 문자열을 Uint8Array로 인코딩
-    var encoder = new TextEncoder();
-    var uint8 = encoder.encode(str);
-    // pako로 압축 (deflate)
-    var compressed = pako.deflate(uint8);
-    // Uint8Array를 바이너리 문자열로 변환
-    var binary = "";
-    for (var i = 0; i < compressed.length; i++) {
-      binary += String.fromCharCode(compressed[i]);
+document.addEventListener('DOMContentLoaded', function() {
+  // URL 쿼리스트링이 "?=" 로 시작하면 -> 마크다운 뷰어 모드
+  if (location.search.startsWith('?=')) {
+    var encodedPart = location.search.substring(2); // "?=" 제거
+    var markdownContent = LZString.decompressFromEncodedURIComponent(encodedPart);
+    if (markdownContent === null) {
+      markdownContent = "데이터 압축 해제에 실패했습니다.";
+      console.error("LZString 압축 해제 실패");
     }
-    // Base64 인코딩하여 반환
-    return btoa(binary);
-  }
-
-  // Base64 디코딩 및 압축 해제하여 Unicode 문자열로 반환하는 함수
-  function decodeAndDecompress(str) {
-    // Base64 디코딩: 바이너리 문자열 획득
-    var binary = atob(str);
-    var len = binary.length;
-    var bytes = new Uint8Array(len);
-    for (var i = 0; i < len; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    // pako로 압축 해제 (inflate)
-    var decompressed = pako.inflate(bytes);
-    var decoder = new TextDecoder();
-    return decoder.decode(decompressed);
-  }
-
-  document.addEventListener('DOMContentLoaded', function() {
-    // URL 쿼리스트링이 "?=" 로 시작하면 -> 마크다운 뷰어 모드
-    if (location.search.startsWith('?=')) {
-      var encodedPart = location.search.substring(2); // "?=" 제거
+    // Showdown으로 마크다운을 HTML로 변환
+    var converter = new showdown.Converter();
+    var htmlContent = converter.makeHtml(markdownContent);
+    // 화면 전체에 출력 (컨테이너 클래스 추가)
+    document.body.innerHTML = '<div class="markdown-body">' + htmlContent + '</div>';
+  } else {
+    // URL에 코드가 없으면 -> 코드 입력 에디터 모드
+    document.body.innerHTML = `
+      <div style="display: flex; flex-direction: column; height: 100vh; margin:0;">
+        <textarea id="codeInput" 
+                  style="flex: 1; font-family: monospace; font-size: 16px; padding: 10px;"
+                  placeholder="마크다운 코드를 입력하세요..."></textarea>
+        <button id="runButton" 
+                style="padding: 10px; font-size: 16px;">실행</button>
+      </div>
+    `;
+    document.getElementById('runButton').addEventListener('click', function() {
+      var code = document.getElementById('codeInput').value;
       try {
-        encodedPart = decodeURIComponent(encodedPart);
+        // LZString의 compressToEncodedURIComponent를 사용하면 URL에 안전하고 더 짧은 문자열을 얻을 수 있음
+        var encoded = LZString.compressToEncodedURIComponent(code);
+        // 현재 URL의 origin과 pathname을 그대로 사용하여 "?=" 뒤에 압축 및 인코딩된 코드를 추가
+        window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
       } catch(e) {
-        console.error("URI 디코딩 실패:", e);
+        alert("코드 인코딩 중 오류가 발생했습니다.");
+        console.error("인코딩 오류:", e);
       }
-      var markdownContent = "";
-      try {
-        markdownContent = decodeAndDecompress(encodedPart);
-      } catch(e) {
-        markdownContent = "Base64 디코딩 또는 압축 해제에 실패했습니다.";
-        console.error("디코딩/압축 해제 실패:", e);
-      }
-      // Showdown으로 마크다운을 HTML로 변환
-      var converter = new showdown.Converter();
-      var htmlContent = converter.makeHtml(markdownContent);
-      // 화면 전체에 출력 (컨테이너 클래스 추가)
-      document.body.innerHTML = '<div class="markdown-body">' + htmlContent + '</div>';
-    } else {
-      // URL에 코드가 없으면 -> 코드 입력 에디터 모드
-      document.body.innerHTML = `
-        <div style="display: flex; flex-direction: column; height: 100vh; margin:0;">
-          <textarea id="codeInput" 
-                    style="flex: 1; font-family: monospace; font-size: 16px; padding: 10px;"
-                    placeholder="마크다운 코드를 입력하세요..."></textarea>
-          <button id="runButton" 
-                  style="padding: 10px; font-size: 16px;">실행</button>
-        </div>
-      `;
-      document.getElementById('runButton').addEventListener('click', function() {
-        var code = document.getElementById('codeInput').value;
-        try {
-          var encoded = compressAndEncode(code);
-          encoded = encodeURIComponent(encoded);
-          // 현재 URL의 origin과 pathname을 그대로 사용하여 "?=" 뒤에 압축 및 Base64 인코딩된 코드를 추가
-          window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
-        } catch(e) {
-          alert("코드 인코딩 중 오류가 발생했습니다.");
-          console.error("인코딩 오류:", e);
-        }
-      });
-    }
-  });
+    });
+  }
+});
 </script>
 </body>
 </html>
