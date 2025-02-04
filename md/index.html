@@ -26,7 +26,7 @@
 <body>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // URL 쿼리스트링이 "?=" 로 시작하면 -> 마크다운 뷰어 모드
+  // 뷰어 모드: URL 쿼리스트링에 코드가 들어있는 경우
   if (location.search.startsWith('?=')) {
     var encodedPart = location.search.substring(2); // "?=" 제거
     var markdownContent = LZString.decompressFromEncodedURIComponent(encodedPart);
@@ -34,13 +34,30 @@ document.addEventListener('DOMContentLoaded', function() {
       markdownContent = "데이터 압축 해제에 실패했습니다.";
       console.error("LZString 압축 해제 실패");
     }
-    // Showdown으로 마크다운을 HTML로 변환
     var converter = new showdown.Converter();
     var htmlContent = converter.makeHtml(markdownContent);
-    // 화면 전체에 출력 (컨테이너 클래스 추가)
     document.body.innerHTML = '<div class="markdown-body">' + htmlContent + '</div>';
+  
+  // 뷰어 모드: URL 쿼리스트링에 저장된 코드의 식별자(id)가 들어있는 경우
+  } else if (location.search.startsWith('?id=')) {
+    var id = location.search.substring(4); // "?id=" 제거
+    var storedEncoded = localStorage.getItem('sharedCode_' + id);
+    if (!storedEncoded) {
+      document.body.innerHTML = "저장된 코드가 없습니다. (localStorage에서 찾을 수 없음)";
+      console.error("localStorage에 저장된 코드가 없습니다. id:", id);
+      return;
+    }
+    var markdownContent = LZString.decompressFromEncodedURIComponent(storedEncoded);
+    if (markdownContent === null) {
+      markdownContent = "데이터 압축 해제에 실패했습니다.";
+      console.error("LZString 압축 해제 실패");
+    }
+    var converter = new showdown.Converter();
+    var htmlContent = converter.makeHtml(markdownContent);
+    document.body.innerHTML = '<div class="markdown-body">' + htmlContent + '</div>';
+  
+  // 에디터 모드: URL에 코드가 없으면 코드 입력창을 보여줌
   } else {
-    // URL에 코드가 없으면 -> 코드 입력 에디터 모드
     document.body.innerHTML = `
       <div style="display: flex; flex-direction: column; height: 100vh; margin:0;">
         <textarea id="codeInput" 
@@ -53,10 +70,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('runButton').addEventListener('click', function() {
       var code = document.getElementById('codeInput').value;
       try {
-        // LZString의 compressToEncodedURIComponent를 사용하면 URL에 안전하고 더 짧은 문자열을 얻을 수 있음
+        // LZString을 이용한 압축 및 URL 인코딩
         var encoded = LZString.compressToEncodedURIComponent(code);
-        // 현재 URL의 origin과 pathname을 그대로 사용하여 "?=" 뒤에 압축 및 인코딩된 코드를 추가
-        window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
+        // URL 길이 제한 문제 해결: 인코딩된 문자열이 길면 localStorage에 저장 후 id로 접근
+        if (encoded.length > 2000) {
+          var id = 'code_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          localStorage.setItem('sharedCode_' + id, encoded);
+          window.location.href = window.location.origin + window.location.pathname + '?id=' + id;
+        } else {
+          window.location.href = window.location.origin + window.location.pathname + '?=' + encoded;
+        }
       } catch(e) {
         alert("코드 인코딩 중 오류가 발생했습니다.");
         console.error("인코딩 오류:", e);
