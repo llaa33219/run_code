@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Markdown Viewer &amp; Editor</title>
-  <!-- 원본 그대로 링크 -->
+  <!-- 원본 그대로 링크 (사용은 안 하지만 삭제 금지) -->
   <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <style>
@@ -38,10 +38,9 @@
 document.addEventListener('DOMContentLoaded', function() {
   /**
    * "?=" / 로컬 스토리지 없이,
-   * 해시("#=") 만 사용하여 마크다운을 표시/편집하도록 한다.
-   * (LZString은 로드하되, 실제 사용은 안 함)
+   * 해시("#=")을 통해 Base64로 인코딩한 마크다운을 표시/편집하도록 한다.
    */
-  
+
   // 해시 "#=" 부분에서 데이터 추출
   function getEncodedData() {
     if (window.location.hash && window.location.hash.startsWith("#=")) {
@@ -53,21 +52,26 @@ document.addEventListener('DOMContentLoaded', function() {
   var encodedData = getEncodedData();
 
   if (encodedData) {
-    // 뷰어 모드: 해시로부터 가져온 데이터 디코딩
+    // 뷰어 모드: 해시로부터 가져온 Base64 데이터 해제
     var markdownContent = "";
-    var decoded;
+    var decodedEncoded;
+
     try {
-      decoded = decodeURIComponent(encodedData);
+      // URL 인코딩 해제
+      decodedEncoded = decodeURIComponent(encodedData);
     } catch(e) {
       console.error("decodeURIComponent 실패:", e);
-      decoded = encodedData;
+      decodedEncoded = encodedData;
     }
 
-    markdownContent = decoded;
-
-    if (markdownContent === null) {
-      markdownContent = "데이터 해석에 실패했습니다.";
-      console.error("데이터 해석 실패");
+    try {
+      // Base64 → 문자열 (유니코드 복원)
+      // atob()는 ASCII 기반이므로, 한글 등 유니코드 처리를 위해 추가 변환
+      var tempText = atob(decodedEncoded);
+      markdownContent = decodeURIComponent(escape(tempText));
+    } catch(e) {
+      markdownContent = "데이터 Base64 해제에 실패했습니다.";
+      console.error("Base64 해제 실패:", e);
     }
 
     // 마크다운 렌더링
@@ -87,8 +91,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById("runButton").addEventListener("click", function() {
       var code = document.getElementById("codeInput").value;
       try {
-        // 그냥 URL-safe 인코딩만 사용
-        var encoded = encodeURIComponent(code);
+        // 문자열(유니코드) → Base64
+        var base64 = btoa(unescape(encodeURIComponent(code)));
+        // URL 안전하게 인코딩
+        var encoded = encodeURIComponent(base64);
         // 해시 "#=" 형태로 저장
         window.location.hash = "=" + encoded;
         // 뷰어 모드로 새로고침
