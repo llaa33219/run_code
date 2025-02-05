@@ -530,9 +530,9 @@ if "tkinter" not in sys.modules:
     sys.modules["tkinter"] = tkinter_mod
 `;
 
-      // URL Query 확인 ( ?=base64 파라미터 )
-      var query = window.location.search;
-      if (query.startsWith("?=") && query.length > 2) {
+      // URL Hash 확인 ( #=base64 파라미터 )
+      var query = window.location.hash;
+      if (query.startsWith("#=") && query.length > 2) {
         var encoded = query.substring(2);
         var userCode;
         try {
@@ -650,7 +650,7 @@ asyncio.run(install_packages(${JSON.stringify(toInstall)}))
           alert("인코딩 중 오류: " + e);
           return;
         }
-        window.location.href = window.location.origin + window.location.pathname + "?=" + encoded;
+        window.location.href = window.location.origin + window.location.pathname + "#=" + encoded;
       });
     }
 
