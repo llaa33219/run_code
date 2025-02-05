@@ -38,7 +38,8 @@
 document.addEventListener('DOMContentLoaded', function() {
   /**
    * "?=" / 로컬 스토리지 없이,
-   * 해시("#=") + LZString 압축만 사용하여 마크다운을 표시/편집하도록 한다.
+   * 해시("#=") 만 사용하여 마크다운을 표시/편집하도록 한다.
+   * (LZString은 로드하되, 실제 사용은 안 함)
    */
   
   // 해시 "#=" 부분에서 데이터 추출
@@ -52,20 +53,21 @@ document.addEventListener('DOMContentLoaded', function() {
   var encodedData = getEncodedData();
 
   if (encodedData) {
-    // 뷰어 모드: 해시로부터 가져온 압축 데이터 해제
+    // 뷰어 모드: 해시로부터 가져온 데이터 디코딩
     var markdownContent = "";
-    var decodedEncoded;
+    var decoded;
     try {
-      decodedEncoded = decodeURIComponent(encodedData);
+      decoded = decodeURIComponent(encodedData);
     } catch(e) {
       console.error("decodeURIComponent 실패:", e);
-      decodedEncoded = encodedData;
+      decoded = encodedData;
     }
 
-    markdownContent = LZString.decompressFromEncodedURIComponent(decodedEncoded);
+    markdownContent = decoded;
+
     if (markdownContent === null) {
-      markdownContent = "데이터 압축 해제에 실패했습니다.";
-      console.error("LZString 압축 해제 실패");
+      markdownContent = "데이터 해석에 실패했습니다.";
+      console.error("데이터 해석 실패");
     }
 
     // 마크다운 렌더링
@@ -85,8 +87,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById("runButton").addEventListener("click", function() {
       var code = document.getElementById("codeInput").value;
       try {
-        // LZString 압축 후 URL-safe 인코딩
-        var encoded = LZString.compressToEncodedURIComponent(code);
+        // 그냥 URL-safe 인코딩만 사용
+        var encoded = encodeURIComponent(code);
         // 해시 "#=" 형태로 저장
         window.location.hash = "=" + encoded;
         // 뷰어 모드로 새로고침
