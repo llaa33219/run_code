@@ -117,6 +117,22 @@
         });
       }
     })();
+
+      // 해시 변경 시 즉시 적용되도록 hashchange 이벤트 리스너 추가
+  window.addEventListener('hashchange', function() {
+    var hash = window.location.hash;
+    if (hash && hash.indexOf('#=') === 0 && hash.length > 2) {
+      var encoded = hash.substring(2);
+      try {
+        var decoded = b64DecodeUnicode(encoded);
+        document.open();
+        document.write(decoded);
+        document.close();
+      } catch(e) {
+        document.body.innerHTML = "<h2>디코딩 오류</h2><p>" + e.toString() + "</p>";
+      }
+    }
+  });
   </script>
 </body>
 </html>
